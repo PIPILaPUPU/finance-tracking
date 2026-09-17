@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+database:
+  url: "postgres://postgres:postgres@localhost:5432/finance_tracker?sslmode=disable"
+
+jwt:
+  secret: "change-me-to-a-secret-at-least-32-chars!!"
+  issuer: "auth-app"
+  access_ttl: "15m"
+  refresh_ttl: "168h"

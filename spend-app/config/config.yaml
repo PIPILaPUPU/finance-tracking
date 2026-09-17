@@ -1,0 +1,9 @@
+server:
+  port: "8081"
+
+database:
+  url: "postgres://user:password@localhost:5432/spend?sslmode=disable"
+
+jwt:
+  secret: "change-me-to-a-secret-at-least-32-chars!!"
+  issuer: "spend-app"
