@@ -8,15 +8,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/PIPILaPUPU/finance-tracking/auth-app/config"
+	"github.com/PIPILaPUPU/finance-tracking/auth-app/internal/handler"
 	"github.com/PIPILaPUPU/finance-tracking/auth-app/internal/logger"
 	"github.com/PIPILaPUPU/finance-tracking/auth-app/internal/repository"
 	"github.com/PIPILaPUPU/finance-tracking/auth-app/internal/service"
 	"github.com/PIPILaPUPU/finance-tracking/database"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
@@ -67,10 +70,26 @@ func run() error {
 		AccessTTL:  cfg.JWT.AccessTTL,
 		RefreshTTL: cfg.JWT.RefreshTTL,
 	})
-	_ = authService
+	authHandler := handler.NewAuthHandler(authService, handler.CookieConfig{
+		Secure:   cfg.Cookie.Secure,
+		SameSite: parseSameSite(cfg.Cookie.SameSite),
+		TTL:      cfg.JWT.RefreshTTL,
+	}, *logger)
 
 	//==============================SERVER==================================
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
+
+	r.Route("/auth", func(r chi.Router) {
+		r.Post("/register", authHandler.Register)
+		r.Post("/login", authHandler.Login)
+		r.Post("/refresh", authHandler.Refresh)
+		r.Post("/logout", authHandler.Logout)
+		r.With(authHandler.Authenticate).Get("/me", authHandler.Me)
+	})
+
 	r.Get("/health_status", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -111,4 +130,17 @@ func run() error {
 	shutDownCtx, shutDownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutDownCancel()
 	return server.Shutdown(shutDownCtx)
+}
+
+func parseSameSite(value string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	case "lax":
+		return http.SameSiteLaxMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }

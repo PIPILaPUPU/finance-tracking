@@ -14,6 +14,7 @@ type Config struct {
 	Server   ServerConfig `yaml:"server"`
 	Database DBconfig     `yaml:"database"`
 	JWT      JWTconfig    `yaml:"jwt"`
+	Cookie   CookieConfig `yaml:"cookie"`
 }
 
 type ServerConfig struct {
@@ -29,6 +30,11 @@ type JWTconfig struct {
 	Issuer     string        `yaml:"issuer"`
 	AccessTTL  time.Duration `yaml:"access_ttl"`
 	RefreshTTL time.Duration `yaml:"refresh_ttl"`
+}
+
+type CookieConfig struct {
+	Secure   bool   `yaml:"secure"`
+	SameSite string `yaml:"same_site"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -73,6 +79,14 @@ func (c *Config) applyEnvOverrides() {
 			c.JWT.RefreshTTL = d
 		}
 	}
+	if value := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); value != "" {
+		if secure, err := strconv.ParseBool(value); err == nil {
+			c.Cookie.Secure = secure
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv("COOKIE_SAME_SITE")); value != "" {
+		c.Cookie.SameSite = value
+	}
 }
 
 func (c *Config) validate() error {
@@ -100,6 +114,9 @@ func (c *Config) validate() error {
 	}
 	if c.JWT.RefreshTTL <= 0 {
 		c.JWT.RefreshTTL = 7 * 24 * time.Hour
+	}
+	if c.Cookie.SameSite == "" {
+		c.Cookie.SameSite = "lax"
 	}
 
 	return nil
