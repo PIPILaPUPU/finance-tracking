@@ -206,7 +206,7 @@ func validateRegistration(request model.RegisterRequest) error {
 		return fmt.Errorf("%w: invalid email", ErrInvalidInput)
 	}
 	if len(request.Password) < 8 || len(request.Password) > 72 {
-		return fmt.Errorf("%w: password must contain 8-72 bytes", ErrInvalidInput)
+		return fmt.Errorf("%w: password must contain 8-72 symbols", ErrInvalidInput)
 	}
 	return nil
 }
