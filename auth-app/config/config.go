@@ -18,7 +18,7 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port string `yaml:"port"`
+	Port string `yaml:"portAuth"`
 }
 
 type DBconfig struct {
