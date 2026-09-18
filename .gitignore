@@ -41,3 +41,6 @@ tmp/
 # Docker local data
 /docker/data/
 /docker/volumes/
+
+# Database 
+connect-to-db.bash
