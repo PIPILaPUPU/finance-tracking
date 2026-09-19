@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/PIPILaPUPU/finance-tracking/account-app/config"
-	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/auth"
-	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/handler"
-	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/repository"
-	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/service"
+	"github.com/PIPILaPUPU/finance-tracking/category-app/config"
+	"github.com/PIPILaPUPU/finance-tracking/category-app/internal/auth"
+	"github.com/PIPILaPUPU/finance-tracking/category-app/internal/handler"
+	"github.com/PIPILaPUPU/finance-tracking/category-app/internal/repository"
+	"github.com/PIPILaPUPU/finance-tracking/category-app/internal/service"
 	"github.com/PIPILaPUPU/finance-tracking/database"
 	"github.com/PIPILaPUPU/finance-tracking/logger"
 	"github.com/go-chi/chi/v5"
@@ -23,7 +23,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("account service stoped", "error", err)
+		slog.Error("account service stoped", err)
 		os.Exit(1)
 	}
 }
@@ -35,7 +35,7 @@ func run() error {
 		AddSource: false,
 	})
 
-	logger.Debug("account-app starting")
+	logger.Debug("category-app starting")
 	logger.Info("check stats")
 
 	//==============================CONFIG==================================
@@ -62,18 +62,19 @@ func run() error {
 	//==============================HANDLERS==================================
 	r := chi.NewRouter()
 
-	repo := repository.NewPostgresAccountRepository(db, logger)
-	accService := service.NewTransactionService(repo)
-	accHandler := handler.NewTransactionHandler(accService, *logger)
+	repo := repository.NewPostgresCategoryRepository(db, logger)
+	catService := service.NewCategoryService(repo)
+	catHandler := handler.NewCategoryHandler(catService, *logger)
 
 	authMiddleware := auth.NewMiddleware(cfg.JWT.Secret, cfg.JWT.Issuer)
 
 	r.Use(authMiddleware.Authenticate)
 
-	r.Post("/accounts", accHandler.Create)
-	r.Get("/accounts", accHandler.GetAll)
-	r.Get("/accounts/{id}", accHandler.GetByID)
-	r.Delete("/accounts/{id}", accHandler.Delete)
+	r.Post("/category", catHandler.Create)
+	r.Get("/categories", catHandler.GetAll)
+	r.Get("/category/{id}", catHandler.GetById)
+	r.Patch("/category/{id}", catHandler.Update)
+	r.Delete("/category/{id}", catHandler.Delete)
 
 	//==============================SERVER==================================
 	r.Get("/health_status", func(w http.ResponseWriter, r *http.Request) {
