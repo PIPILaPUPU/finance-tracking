@@ -5,9 +5,9 @@ auth-app          ✅
     ↓
 account-app       ✅
     ↓
-category-app      ← следующий
+category-app      ✅
     ↓
-transaction-app
+transaction-app ← следующий
     ↓
 budget-app
     ↓

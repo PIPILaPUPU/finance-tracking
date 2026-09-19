@@ -17,6 +17,10 @@ import (
 	"github.com/PIPILaPUPU/finance-tracking/database"
 	"github.com/PIPILaPUPU/finance-tracking/logger"
 	"github.com/PIPILaPUPU/finance-tracking/transaction-app/config"
+	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/auth"
+	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/handler"
+	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/repository"
+	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/service"
 )
 
 func main() {
@@ -33,7 +37,7 @@ func run() error {
 		AddSource: false,
 	})
 
-	logger.Debug("auth-app starting")
+	logger.Debug("transaction-app starting")
 	logger.Info("check stats")
 
 	//==============================CONFIG==================================
@@ -55,13 +59,23 @@ func run() error {
 	}
 	defer db.Close()
 
-	logger.Info("auth-app started", "port", cfg.Server.Port)
+	logger.Info("transaction-app started", "port", cfg.Server.Port)
 
 	//==============================HANDLERs==================================
 
-	//TODO
+	rep := repository.NewPostgresCategoryRepository(db, logger)
+	service := service.NewTransactionService(rep)
+	handler := handler.NewTransactionHandler(service, *logger)
 
 	r := chi.NewRouter()
+
+	authMiddleware := auth.NewMiddleware(cfg.JWT.Secret, cfg.JWT.Issuer)
+
+	r.Use(authMiddleware.Authenticate)
+
+	r.Post("/transactions", handler.CreateTransaction)
+	r.Get("/transactions", handler.GetTransactions)
+	r.Get("/transactions/{id}", handler.GetTransaction)
 
 	r.Get("/items_health", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)

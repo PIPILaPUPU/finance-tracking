@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: finance_tracker
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth:
+    image: golang:1.27-alpine
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "apk add --no-cache git ca-certificates && update-ca-certificates && GOPROXY=https://proxy.golang.org,direct go run ./auth-app/cmd/app -config /app/config.yaml"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable"
+      SERVER_PORT: "8080"
+    ports:
+      - "${AUTH_HOST_PORT:-8080}:8080"
+    depends_on:
+      - postgres
+
+  account:
+    image: golang:1.27-alpine
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "apk add --no-cache git ca-certificates && update-ca-certificates && GOPROXY=https://proxy.golang.org,direct go run ./account-app/cmd/app -config /app/config.yaml"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable"
+      SERVER_PORT: "8081"
+    ports:
+      - "${ACCOUNT_HOST_PORT:-8081}:8081"
+    depends_on:
+      - postgres
+
+  transaction:
+    image: golang:1.27-alpine
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "apk add --no-cache git ca-certificates && update-ca-certificates && GOPROXY=https://proxy.golang.org,direct go run ./transaction-app/cmd/app -config /app/config.yaml"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable"
+      SERVER_PORT: "8082"
+    ports:
+      - "${TRANSACTION_HOST_PORT:-8082}:8082"
+    depends_on:
+      - postgres
+
+  category:
+    image: golang:1.27-alpine
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "apk add --no-cache git ca-certificates && update-ca-certificates && GOPROXY=https://proxy.golang.org,direct go run ./category-app/cmd/app -config /app/config.yaml"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable"
+      SERVER_PORT: "8083"
+    ports:
+      - "${CATEGORY_HOST_PORT:-8083}:8083"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
