@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/dist
+**/.env
+**/*.md
+frontend/README.md
+backend/.env
+backend/docker-compose.yml
+agent-transcripts
+.cursor
+**/__pycache__
