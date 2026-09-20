@@ -16,28 +16,28 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/auth-app ./auth-app/cmd/app \
 FROM alpine:3.20 AS auth
 RUN apk add --no-cache ca-certificates
 COPY --from=backend-builder /out/auth-app /usr/local/bin/app
-COPY backend/config.yaml /config/config.yaml
+COPY backend/config.example.yaml /config/config.yaml
 EXPOSE 8080
 CMD ["app", "-config", "/config/config.yaml"]
 
 FROM alpine:3.20 AS account
 RUN apk add --no-cache ca-certificates
 COPY --from=backend-builder /out/account-app /usr/local/bin/app
-COPY backend/config.yaml /config/config.yaml
+COPY backend/config.example.yaml /config/config.yaml
 EXPOSE 8081
 CMD ["app", "-config", "/config/config.yaml"]
 
 FROM alpine:3.20 AS category
 RUN apk add --no-cache ca-certificates
 COPY --from=backend-builder /out/category-app /usr/local/bin/app
-COPY backend/config.yaml /config/config.yaml
+COPY backend/config.example.yaml /config/config.yaml
 EXPOSE 8083
 CMD ["app", "-config", "/config/config.yaml"]
 
 FROM alpine:3.20 AS transaction
 RUN apk add --no-cache ca-certificates
 COPY --from=backend-builder /out/transaction-app /usr/local/bin/app
-COPY backend/config.yaml /config/config.yaml
+COPY backend/config.example.yaml /config/config.yaml
 EXPOSE 8082
 CMD ["app", "-config", "/config/config.yaml"]
 

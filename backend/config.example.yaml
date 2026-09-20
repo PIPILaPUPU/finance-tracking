@@ -1,0 +1,18 @@
+server:
+  portAuth: 8080
+  portAccounts: 8081
+  portTransaction: 8082
+  portCategory: 8083
+
+database:
+  url: "postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable"
+
+jwt:
+  secret: "REPLACE_VIA_ENV_JWT_SECRET_MIN_32_CHARS"
+  issuer: "auth-app"
+  access_ttl: "15m"
+  refresh_ttl: "168h"
+
+cookie:
+  secure: false
+  same_site: "lax"
