@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: finance_tracker
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-finance_tracker}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,7 +19,7 @@ services:
       context: .
       target: migrate
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finance_tracker}?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -31,10 +31,12 @@ services:
       target: auth
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finance_tracker}?sslmode=disable
       SERVER_PORT: "8080"
-      JWT_SECRET: OiJG9pVB9hdNBM7Yp0rxyhQCsHstedWx
-      JWT_ISSUER: auth-app
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_ISSUER: ${JWT_ISSUER:-auth-app}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -45,10 +47,10 @@ services:
       target: account
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finance_tracker}?sslmode=disable
       SERVER_PORT: "8081"
-      JWT_SECRET: OiJG9pVB9hdNBM7Yp0rxyhQCsHstedWx
-      JWT_ISSUER: auth-app
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-auth-app}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -59,10 +61,10 @@ services:
       target: category
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finance_tracker}?sslmode=disable
       SERVER_PORT: "8083"
-      JWT_SECRET: OiJG9pVB9hdNBM7Yp0rxyhQCsHstedWx
-      JWT_ISSUER: auth-app
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-auth-app}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -73,10 +75,10 @@ services:
       target: transaction
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/finance_tracker?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finance_tracker}?sslmode=disable
       SERVER_PORT: "8082"
-      JWT_SECRET: OiJG9pVB9hdNBM7Yp0rxyhQCsHstedWx
-      JWT_ISSUER: auth-app
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-auth-app}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -87,7 +89,7 @@ services:
       target: web
     restart: unless-stopped
     ports:
-      - "${WEB_HOST_PORT:-80}:80"
+      - "${WEB_HOST_PORT:-8080}:80"
     depends_on:
       - auth
       - account
