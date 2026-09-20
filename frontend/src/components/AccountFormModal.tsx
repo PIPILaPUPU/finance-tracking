@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { Account, CreateAccountRequest, Currency } from '../types'
+import type { Account, AllocationRule, CreateAccountRequest, Currency } from '../types'
 import { getRootAccounts } from '../utils/accounts'
 import { Modal } from './Modal'
 
@@ -8,7 +8,9 @@ const CURRENCIES: Currency[] = ['RUB', 'USD', 'EUR', 'GBP', 'CNY']
 interface AccountFormModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: CreateAccountRequest) => void
+  onSubmit: (
+    data: CreateAccountRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }> | void
   accounts: Account[]
   /** Prefill parent when adding a sub-account from a row */
   defaultParentId?: string | null
@@ -27,7 +29,10 @@ export function AccountFormModal({
   const [currency, setCurrency] = useState<Currency>('RUB')
   const [balance, setBalance] = useState('0')
   const [parentId, setParentId] = useState<string>('')
+  const [allocationRule, setAllocationRule] = useState<AllocationRule>('manual')
+  const [percent, setPercent] = useState('20')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -44,7 +49,10 @@ export function AccountFormModal({
     }
     setName('')
     setBalance('0')
+    setAllocationRule('manual')
+    setPercent('20')
     setError('')
+    setSubmitting(false)
   }, [open, defaultParentId, accounts])
 
   const reset = () => {
@@ -53,22 +61,20 @@ export function AccountFormModal({
     setCurrency('RUB')
     setBalance('0')
     setParentId('')
+    setAllocationRule('manual')
+    setPercent('20')
     setError('')
+    setSubmitting(false)
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const amount = Number(balance)
     if (!name.trim()) {
       setError('Укажите название счёта')
       return
     }
     if (!type.trim()) {
       setError('Укажите тип счёта')
-      return
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Баланс должен быть больше 0')
       return
     }
 
@@ -82,18 +88,54 @@ export function AccountFormModal({
       return
     }
 
-    onSubmit({
+    const isSub = Boolean(parentId)
+    let amount = Number(balance)
+    let percentValue: number | null = null
+
+    if (isSub && allocationRule === 'percent') {
+      percentValue = Number(percent)
+      if (!Number.isFinite(percentValue) || percentValue < 1 || percentValue > 100) {
+        setError('Процент должен быть от 1 до 100')
+        return
+      }
+      amount = Math.round(((parent?.balance ?? 0) * percentValue) / 100)
+      if (amount <= 0) {
+        setError('Процент от баланса родителя должен быть больше 0')
+        return
+      }
+    } else if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Баланс должен быть больше 0')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+    const result = await onSubmit({
       name: name.trim(),
-      type: parentId ? 'subaccount' : type.trim(),
+      type: isSub ? 'subaccount' : type.trim(),
       currency: parent?.currency ?? currency,
       balance: Math.round(amount),
       parent_id: parentId || null,
+      allocation_rule: isSub ? allocationRule : undefined,
+      percent: isSub && allocationRule === 'percent' ? percentValue : undefined,
     })
+    setSubmitting(false)
+
+    if (result && !result.ok) {
+      setError(result.message)
+      return
+    }
+
     reset()
     onClose()
   }
 
   const isSub = Boolean(parentId)
+  const parent = parentId ? accounts.find((a) => a.id === parentId) : null
+  const previewPercentAmount =
+    isSub && allocationRule === 'percent' && parent
+      ? Math.round((parent.balance * Number(percent || 0)) / 100)
+      : null
 
   return (
     <Modal
@@ -114,9 +156,9 @@ export function AccountFormModal({
               const next = e.target.value
               setParentId(next)
               if (next) {
-                const parent = accounts.find((a) => a.id === next)
-                if (parent) {
-                  setCurrency(parent.currency)
+                const nextParent = accounts.find((a) => a.id === next)
+                if (nextParent) {
+                  setCurrency(nextParent.currency)
                   setType('subaccount')
                 }
               } else {
@@ -138,7 +180,7 @@ export function AccountFormModal({
             id="acc-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={isSub ? 'Отпуск' : 'Tinkoff Black'}
+            placeholder={isSub ? 'Продукты' : 'Tinkoff Black'}
           />
         </div>
         {!isSub ? (
@@ -170,23 +212,53 @@ export function AccountFormModal({
         ) : (
           <p className="field-hint">Валюта как у родителя: {currency}</p>
         )}
-        <div className="field">
-          <label htmlFor="acc-balance">Баланс</label>
-          <input
-            id="acc-balance"
-            type="number"
-            min={1}
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-          />
-        </div>
+        {isSub ? (
+          <div className="field">
+            <label htmlFor="acc-rule">Правило распределения</label>
+            <select
+              id="acc-rule"
+              value={allocationRule}
+              onChange={(e) => setAllocationRule(e.target.value as AllocationRule)}
+            >
+              <option value="manual">Вручную (сумма)</option>
+              <option value="percent">Процент от основного счёта</option>
+            </select>
+          </div>
+        ) : null}
+        {isSub && allocationRule === 'percent' ? (
+          <div className="field">
+            <label htmlFor="acc-percent">Процент</label>
+            <input
+              id="acc-percent"
+              type="number"
+              min={1}
+              max={100}
+              value={percent}
+              onChange={(e) => setPercent(e.target.value)}
+            />
+            {previewPercentAmount !== null ? (
+              <p className="field-hint">Будет выделено: {previewPercentAmount}</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="field">
+            <label htmlFor="acc-balance">{isSub ? 'Сумма субсчёта' : 'Баланс'}</label>
+            <input
+              id="acc-balance"
+              type="number"
+              min={1}
+              value={balance}
+              onChange={(e) => setBalance(e.target.value)}
+            />
+          </div>
+        )}
         {error ? <p className="form-error">{error}</p> : null}
         <div className="modal-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Отмена
           </button>
-          <button type="submit" className="btn btn-primary">
-            Добавить
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? 'Сохраняем…' : 'Добавить'}
           </button>
         </div>
       </form>

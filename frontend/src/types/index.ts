@@ -1,4 +1,4 @@
-/** Types aligned with backend JSON for later API wiring. */
+/** Types aligned with backend JSON. */
 
 export type Currency =
   | 'RUB'
@@ -24,6 +24,7 @@ export type Currency =
 
 /** Backend spelling is `expanse` (not expense). */
 export type TransactionType = 'expanse' | 'income' | 'transfer'
+export type AllocationRule = 'manual' | 'percent'
 
 export interface User {
   id: string
@@ -40,8 +41,9 @@ export interface Account {
   type: string
   currency: Currency
   balance: number
-  /** null = корневой счёт; иначе id родителя (субсчёт, на бэке появится позже) */
   parent_id: string | null
+  allocation_rule?: AllocationRule
+  percent?: number | null
   created_at: string
   updated_at: string
   /** UI-only: last digits / mask for cards */
@@ -91,6 +93,8 @@ export interface CreateAccountRequest {
   currency: Currency
   balance: number
   parent_id?: string | null
+  allocation_rule?: AllocationRule
+  percent?: number | null
 }
 
 export interface CreateCategoryRequest {

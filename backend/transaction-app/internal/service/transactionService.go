@@ -30,7 +30,7 @@ func NewTransactionService(rep TransactionRepository) *TransactionService {
 }
 
 // =================================SERVICE FUNCTION=======================================
-func (s *TransactionService) Create(ctx context.Context, UserId uuid.UUID, req model.CreateTransactionRequest) (model.Transaction, error) {
+func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, req model.CreateTransactionRequest) (model.Transaction, error) {
 	if req.Amount <= 0 {
 		return model.Transaction{}, ErrInvalidAmount
 	}
@@ -40,24 +40,14 @@ func (s *TransactionService) Create(ctx context.Context, UserId uuid.UUID, req m
 		if req.FromAccountID == nil {
 			return model.Transaction{}, ErrInvalidTransaction
 		}
-
-		if req.FromAccountID == nil {
-			return model.Transaction{}, ErrInvalidTransaction
-		}
 	case "income":
 		if req.ToAccountID == nil {
 			return model.Transaction{}, ErrInvalidTransaction
 		}
-
-		if req.FromAccountID != nil {
-			return model.Transaction{}, ErrInvalidTransaction
-		}
-
 	case "transfer":
 		if req.FromAccountID == nil || req.ToAccountID == nil {
 			return model.Transaction{}, ErrInvalidTransaction
 		}
-
 		if *req.FromAccountID == *req.ToAccountID {
 			return model.Transaction{}, ErrInvalidTransaction
 		}
@@ -67,11 +57,11 @@ func (s *TransactionService) Create(ctx context.Context, UserId uuid.UUID, req m
 
 	transaction := model.Transaction{
 		Id:              uuid.New(),
-		User_id:         UserId,
+		User_id:         userID,
 		Type:            req.Type,
-		From_account_id: *req.FromAccountID,
-		To_account_id:   *req.ToAccountID,
-		Category_id:     *req.CategoryID,
+		From_account_id: derefUUID(req.FromAccountID),
+		To_account_id:   derefUUID(req.ToAccountID),
+		Category_id:     derefUUID(req.CategoryID),
 		Amount:          req.Amount,
 		Description:     req.Description,
 	}
@@ -83,6 +73,13 @@ func (s *TransactionService) GetAll(ctx context.Context, userID uuid.UUID) ([]mo
 	return s.repository.GetAll(ctx, userID)
 }
 
-func (s *TransactionService) GetById(ctx context.Context, userID uuid.UUID, transactionId uuid.UUID) (model.Transaction, error) {
-	return s.repository.GetById(ctx, userID, transactionId)
+func (s *TransactionService) GetById(ctx context.Context, userID uuid.UUID, transactionID uuid.UUID) (model.Transaction, error) {
+	return s.repository.GetById(ctx, userID, transactionID)
+}
+
+func derefUUID(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }

@@ -3,13 +3,21 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export function RegisterPage() {
-  const { register, isAuthenticated } = useAuth()
+  const { register, isAuthenticated, bootstrapping } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  if (bootstrapping) {
+    return (
+      <div className="auth-page">
+        <p>Загрузка…</p>
+      </div>
+    )
+  }
 
   if (isAuthenticated) return <Navigate to="/" replace />
 

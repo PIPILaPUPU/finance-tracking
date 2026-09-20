@@ -7,10 +7,11 @@ import (
 
 	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/model"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var transactionColumn = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description`
+var transactionColumns = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description, created_at`
 
 type PostgreTransactionRepository struct {
 	pool   *pgxpool.Pool
@@ -22,44 +23,56 @@ func NewPostgresCategoryRepository(pool *pgxpool.Pool, log *slog.Logger) *Postgr
 }
 
 func (r *PostgreTransactionRepository) Create(ctx context.Context, req model.Transaction) (model.Transaction, error) {
-	query := `
-		INSERT INTO transactions (` + transactionColumn + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING created_at
-	`
-
-	row := r.pool.QueryRow(ctx, query, req.Id, req.User_id, req.Type, req.From_account_id, req.To_account_id, req.Category_id, req.Amount, req.Description)
-
-	var t model.Transaction
-	err := row.Scan(&t.Id, &t.User_id, &t.Type, &t.From_account_id, &t.To_account_id, &t.Category_id, &t.Amount, &t.Description, &t.Created_at)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
+		return model.Transaction{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := applyBalanceChanges(ctx, tx, req); err != nil {
 		return model.Transaction{}, err
 	}
 
-	return t, nil
+	row := tx.QueryRow(ctx, `
+		INSERT INTO transactions (id, user_id, type, from_account_id, to_account_id, category_id, amount, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING `+transactionColumns,
+		req.Id, req.User_id, req.Type, nullIfNilUUID(req.From_account_id), nullIfNilUUID(req.To_account_id),
+		nullIfNilUUID(req.Category_id), req.Amount, req.Description,
+	)
+
+	created, err := scanTransaction(row)
+	if err != nil {
+		return model.Transaction{}, fmt.Errorf("create transaction: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return model.Transaction{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return created, nil
 }
 
-func (r *PostgreTransactionRepository) GetAll(ctx context.Context, UserId uuid.UUID) ([]model.Transaction, error) {
-	query := `SELECT ` + transactionColumn + ` FROM transactions WHERE user_id = $1 ORDER BY created_at DESC`
-
-	rows, err := r.pool.Query(ctx, query, UserId)
+func (r *PostgreTransactionRepository) GetAll(ctx context.Context, userID uuid.UUID) ([]model.Transaction, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+transactionColumns+`
+		FROM transactions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get transactions list: %w", err)
 	}
 	defer rows.Close()
 
-	var transactions []model.Transaction
-
+	transactions := make([]model.Transaction, 0)
 	for rows.Next() {
-		var t model.Transaction
-		err = rows.Scan(&t.Id, &t.User_id, &t.Type, &t.From_account_id, &t.To_account_id, &t.Category_id, &t.Amount, &t.Description, &t.Created_at)
+		t, err := scanTransaction(rows)
 		if err != nil {
 			return nil, err
 		}
-
 		transactions = append(transactions, t)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("get transactions list: %w", err)
 	}
@@ -67,16 +80,95 @@ func (r *PostgreTransactionRepository) GetAll(ctx context.Context, UserId uuid.U
 	return transactions, nil
 }
 
-func (r *PostgreTransactionRepository) GetById(ctx context.Context, UserId uuid.UUID, transactionId uuid.UUID) (model.Transaction, error) {
-	query := `SELECT ` + transactionColumn + ` FROM transactions WHERE id = $1 AND user_id = $2`
+func (r *PostgreTransactionRepository) GetById(ctx context.Context, userID uuid.UUID, transactionID uuid.UUID) (model.Transaction, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT `+transactionColumns+`
+		FROM transactions
+		WHERE id = $1 AND user_id = $2
+	`, transactionID, userID)
 
-	var t model.Transaction
-
-	row := r.pool.QueryRow(ctx, query, transactionId, UserId)
-	err := row.Scan(&t.Id, &t.User_id, &t.Type, &t.From_account_id, &t.To_account_id, &t.Category_id, &t.Amount, &t.Description, &t.Created_at)
+	t, err := scanTransaction(row)
 	if err != nil {
 		return model.Transaction{}, err
 	}
+	return t, nil
+}
 
+func applyBalanceChanges(ctx context.Context, tx pgx.Tx, req model.Transaction) error {
+	switch req.Type {
+	case "expanse":
+		return adjustBalance(ctx, tx, req.User_id, req.From_account_id, -req.Amount)
+	case "income":
+		return adjustBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
+	case "transfer":
+		if err := adjustBalance(ctx, tx, req.User_id, req.From_account_id, -req.Amount); err != nil {
+			return err
+		}
+		return adjustBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
+	default:
+		return fmt.Errorf("unsupported transaction type %q", req.Type)
+	}
+}
+
+func adjustBalance(ctx context.Context, tx pgx.Tx, userID, accountID uuid.UUID, delta int64) error {
+	if accountID == uuid.Nil {
+		return fmt.Errorf("account id is required")
+	}
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE Accounts
+		SET balance = balance + $1, updated_at = NOW()
+		WHERE id = $2 AND userid = $3
+	`, delta, accountID, userID)
+	if err != nil {
+		return fmt.Errorf("update account balance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("account not found")
+	}
+	return nil
+}
+
+func nullIfNilUUID(id uuid.UUID) any {
+	if id == uuid.Nil {
+		return nil
+	}
+	return id
+}
+
+type scannable interface {
+	Scan(dest ...any) error
+}
+
+func scanTransaction(row scannable) (model.Transaction, error) {
+	var (
+		t              model.Transaction
+		fromAccountID  *uuid.UUID
+		toAccountID    *uuid.UUID
+		categoryID     *uuid.UUID
+	)
+	err := row.Scan(
+		&t.Id,
+		&t.User_id,
+		&t.Type,
+		&fromAccountID,
+		&toAccountID,
+		&categoryID,
+		&t.Amount,
+		&t.Description,
+		&t.Created_at,
+	)
+	if err != nil {
+		return model.Transaction{}, err
+	}
+	if fromAccountID != nil {
+		t.From_account_id = *fromAccountID
+	}
+	if toAccountID != nil {
+		t.To_account_id = *toAccountID
+	}
+	if categoryID != nil {
+		t.Category_id = *categoryID
+	}
 	return t, nil
 }

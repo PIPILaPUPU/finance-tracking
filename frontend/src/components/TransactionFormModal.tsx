@@ -8,7 +8,9 @@ interface TransactionFormModalProps {
   onClose: () => void
   accounts: Account[]
   categories: Category[]
-  onSubmit: (data: CreateTransactionRequest) => { ok: true } | { ok: false; message: string }
+  onSubmit: (
+    data: CreateTransactionRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
 }
 
 export function TransactionFormModal({
@@ -25,6 +27,7 @@ export function TransactionFormModal({
   const [toAccountId, setToAccountId] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const reset = () => {
     setType('expanse')
@@ -34,9 +37,10 @@ export function TransactionFormModal({
     setToAccountId('')
     setCategoryId('')
     setError('')
+    setSubmitting(false)
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const value = Number(amount)
     if (!description.trim()) {
@@ -48,7 +52,8 @@ export function TransactionFormModal({
       return
     }
 
-    const result = onSubmit({
+    setSubmitting(true)
+    const result = await onSubmit({
       type,
       amount: Math.round(value),
       description: description.trim(),
@@ -56,6 +61,7 @@ export function TransactionFormModal({
       to_account_id: toAccountId || undefined,
       category_id: categoryId || undefined,
     })
+    setSubmitting(false)
 
     if (!result.ok) {
       setError(result.message)
@@ -172,8 +178,8 @@ export function TransactionFormModal({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Отмена
           </button>
-          <button type="submit" className="btn btn-primary">
-            Сохранить
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? 'Сохраняем…' : 'Сохранить'}
           </button>
         </div>
       </form>

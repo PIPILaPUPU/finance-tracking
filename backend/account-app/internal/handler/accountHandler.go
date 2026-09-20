@@ -19,6 +19,7 @@ type accountService interface {
 	Create(context.Context, uuid.UUID, model.CreateAccountRequest) (model.Account, error)
 	GetAll(context.Context, uuid.UUID) ([]model.Account, error)
 	GetByID(context.Context, uuid.UUID, uuid.UUID) (model.Account, error)
+	GetSubAccounts(context.Context, uuid.UUID, uuid.UUID) ([]model.Account, error)
 	Delete(context.Context, uuid.UUID, uuid.UUID) error
 }
 
@@ -93,6 +94,28 @@ func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, account)
+}
+
+func (h *AccountHandler) GetSubAccounts(w http.ResponseWriter, r *http.Request) {
+	Claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		return
+	}
+
+	subs, err := h.service.GetSubAccounts(r.Context(), Claims.UserID, id)
+	if err != nil {
+		writeHTTPError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, subs)
 }
 
 func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {

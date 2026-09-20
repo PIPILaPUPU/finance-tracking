@@ -10,6 +10,7 @@ import (
 
 	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/auth"
 	"github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/model"
+	txservice "github.com/PIPILaPUPU/finance-tracking/transaction-app/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -45,7 +46,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 
 	transaction, err := h.service.Create(r.Context(), Claims.UserID, req)
 	if err != nil {
-		http.Error(w, "failed to create transaction", http.StatusInternalServerError)
+		writeTransactionError(w, err)
 		return
 	}
 
@@ -128,4 +129,16 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+func writeTransactionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, txservice.ErrInvalidAmount),
+		errors.Is(err, txservice.ErrInvalidTransaction),
+		errors.Is(err, txservice.ErrInvalidTransactionType):
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	default:
+		slog.Error("transaction request failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_server_error", "internal server error")
+	}
 }

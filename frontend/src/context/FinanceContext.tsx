@@ -2,16 +2,15 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
-import {
-  MOCK_ACCOUNTS,
-  MOCK_CATEGORIES,
-  MOCK_TRANSACTIONS,
-  MOCK_WEEKLY_EXPENSES,
-} from '../data/mock'
+import { ApiError } from '../api/client'
+import * as accountsApi from '../api/accounts'
+import * as categoriesApi from '../api/categories'
+import * as transactionsApi from '../api/transactions'
 import type {
   Account,
   Category,
@@ -20,8 +19,12 @@ import type {
   CreateTransactionRequest,
   Transaction,
 } from '../types'
-import { ZERO_UUID, uid } from '../utils/format'
 import { getRootAccounts } from '../utils/accounts'
+import {
+  decorateAccount,
+  decorateCategory,
+  weeklyExpensesFromTransactions,
+} from '../utils/decorate'
 import { useAuth } from './AuthContext'
 
 interface FinanceContextValue {
@@ -32,26 +35,64 @@ interface FinanceContextValue {
   totalBalance: number
   monthIncome: number
   monthExpense: number
-  addAccount: (data: CreateAccountRequest) => void
-  removeAccount: (id: string) => void
-  addCategory: (data: CreateCategoryRequest) => void
-  updateCategory: (id: string, name: string) => void
-  removeCategory: (id: string) => void
-  addTransaction: (data: CreateTransactionRequest) => { ok: true } | { ok: false; message: string }
+  loading: boolean
+  error: string | null
+  refresh: () => Promise<void>
+  addAccount: (
+    data: CreateAccountRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  removeAccount: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
+  addCategory: (
+    data: CreateCategoryRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  updateCategory: (
+    id: string,
+    name: string,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  removeCategory: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
+  addTransaction: (
+    data: CreateTransactionRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
 
-const ACCOUNT_COLORS = ['#FF8A3D', '#22C55E', '#3B5BDB', '#EC4899', '#8B5CF6', '#14B8A6']
-const CATEGORY_COLORS = ['#FF8A3D', '#5B4BFF', '#EC4899', '#22C55E', '#8B5CF6', '#F59E0B']
+function mapError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message || fallback
+  return fallback
+}
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
-  const userId = user?.id ?? 'user-1'
+  const { isAuthenticated } = useAuth()
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS)
-  const [categories, setCategories] = useState<Category[]>(MOCK_CATEGORIES)
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS)
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [nextAccounts, nextCategories, nextTransactions] = await Promise.all([
+        accountsApi.listAccounts(),
+        categoriesApi.listCategories(),
+        transactionsApi.listTransactions(),
+      ])
+      setAccounts(nextAccounts.map((item, index) => decorateAccount(item, index)))
+      setCategories(nextCategories.map((item, index) => decorateCategory(item, index)))
+      setTransactions(nextTransactions ?? [])
+    } catch (err) {
+      setError(mapError(err, 'Не удалось загрузить данные'))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void refresh()
+  }, [isAuthenticated, refresh])
 
   const totalBalance = useMemo(
     () => getRootAccounts(accounts).reduce((sum, a) => sum + a.balance, 0),
@@ -74,133 +115,105 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [transactions],
   )
 
-  const addAccount = useCallback(
-    (data: CreateAccountRequest) => {
-      const now = new Date().toISOString()
-      const parentId = data.parent_id ?? null
-      const parent = parentId ? accounts.find((a) => a.id === parentId) : null
-      const next: Account = {
-        id: uid('acc'),
-        userid: userId,
-        name: data.name,
-        type: parentId ? 'subaccount' : data.type,
-        currency: parent?.currency ?? data.currency,
-        balance: data.balance,
-        parent_id: parentId,
-        created_at: now,
-        updated_at: now,
-        color: parent?.color
-          ? parent.color
-          : ACCOUNT_COLORS[accounts.length % ACCOUNT_COLORS.length],
-        icon: parentId
-          ? 'wallet'
-          : data.type === 'cash'
-            ? 'cash'
-            : data.type === 'savings'
-              ? 'piggy'
-              : 'card',
-      }
-      setAccounts((prev) => [...prev, next])
-    },
-    [accounts, userId],
+  const weeklyExpenses = useMemo(
+    () => weeklyExpensesFromTransactions(transactions),
+    [transactions],
   )
 
-  const removeAccount = useCallback((id: string) => {
-    setAccounts((prev) => prev.filter((a) => a.id !== id && a.parent_id !== id))
+  const addAccount = useCallback(async (data: CreateAccountRequest) => {
+    try {
+      const created = await accountsApi.createAccount(data)
+      setAccounts((prev) => [...prev, decorateAccount(created, prev.length)])
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось создать счёт') }
+    }
   }, [])
 
-  const addCategory = useCallback(
-    (data: CreateCategoryRequest) => {
-      const now = new Date().toISOString()
-      const next: Category = {
-        id: uid('cat'),
-        userid: userId,
-        name: data.name,
-        created_at: now,
-        updated_at: now,
-        color: CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length],
-        icon: 'cart',
-      }
-      setCategories((prev) => [...prev, next])
-    },
-    [categories.length, userId],
-  )
-
-  const updateCategory = useCallback((id: string, name: string) => {
-    const now = new Date().toISOString()
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, name, updated_at: now } : c)),
-    )
+  const removeAccount = useCallback(async (id: string) => {
+    try {
+      await accountsApi.deleteAccount(id)
+      setAccounts((prev) => prev.filter((a) => a.id !== id && a.parent_id !== id))
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось удалить счёт') }
+    }
   }, [])
 
-  const removeCategory = useCallback((id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id))
+  const addCategory = useCallback(async (data: CreateCategoryRequest) => {
+    try {
+      const created = await categoriesApi.createCategory(data)
+      setCategories((prev) => [...prev, decorateCategory(created, prev.length)])
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось создать категорию') }
+    }
   }, [])
 
-  const addTransaction = useCallback(
-    (data: CreateTransactionRequest) => {
-      if (data.amount <= 0) {
-        return { ok: false as const, message: 'Сумма должна быть больше 0' }
-      }
-      if (data.type === 'expanse' && !data.from_account_id) {
-        return { ok: false as const, message: 'Укажите счёт списания' }
-      }
-      if (data.type === 'income' && !data.to_account_id) {
-        return { ok: false as const, message: 'Укажите счёт зачисления' }
-      }
-      if (data.type === 'transfer') {
-        if (!data.from_account_id || !data.to_account_id) {
-          return { ok: false as const, message: 'Укажите оба счёта' }
-        }
-        if (data.from_account_id === data.to_account_id) {
-          return { ok: false as const, message: 'Счета перевода должны отличаться' }
-        }
-      }
-
-      const now = new Date().toISOString()
-      const tx: Transaction = {
-        id: uid('tx'),
-        user_id: userId,
-        type: data.type,
-        from_account_id: data.from_account_id ?? ZERO_UUID,
-        to_account_id: data.to_account_id ?? ZERO_UUID,
-        category_id: data.category_id ?? ZERO_UUID,
-        amount: data.amount,
-        description: data.description,
-        created_at: now,
-      }
-
-      setTransactions((prev) => [tx, ...prev])
-      setAccounts((prev) =>
-        prev.map((acc) => {
-          let balance = acc.balance
-          if (data.type === 'expanse' && acc.id === data.from_account_id) {
-            balance -= data.amount
-          }
-          if (data.type === 'income' && acc.id === data.to_account_id) {
-            balance += data.amount
-          }
-          if (data.type === 'transfer') {
-            if (acc.id === data.from_account_id) balance -= data.amount
-            if (acc.id === data.to_account_id) balance += data.amount
-          }
-          return { ...acc, balance, updated_at: now }
-        }),
+  const updateCategory = useCallback(async (id: string, name: string) => {
+    try {
+      const updated = await categoriesApi.updateCategoryRequest(id, { name })
+      setCategories((prev) =>
+        prev.map((c) => (c.id === id ? decorateCategory({ ...c, ...updated }) : c)),
       )
       return { ok: true as const }
-    },
-    [userId],
-  )
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось обновить категорию') }
+    }
+  }, [])
+
+  const removeCategory = useCallback(async (id: string) => {
+    try {
+      await categoriesApi.deleteCategory(id)
+      setCategories((prev) => prev.filter((c) => c.id !== id))
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось удалить категорию') }
+    }
+  }, [])
+
+  const addTransaction = useCallback(async (data: CreateTransactionRequest) => {
+    if (data.amount <= 0) {
+      return { ok: false as const, message: 'Сумма должна быть больше 0' }
+    }
+    if (data.type === 'expanse' && !data.from_account_id) {
+      return { ok: false as const, message: 'Укажите счёт списания' }
+    }
+    if (data.type === 'income' && !data.to_account_id) {
+      return { ok: false as const, message: 'Укажите счёт зачисления' }
+    }
+    if (data.type === 'transfer') {
+      if (!data.from_account_id || !data.to_account_id) {
+        return { ok: false as const, message: 'Укажите оба счёта' }
+      }
+      if (data.from_account_id === data.to_account_id) {
+        return { ok: false as const, message: 'Счета перевода должны отличаться' }
+      }
+    }
+
+    try {
+      const created = await transactionsApi.createTransaction(data)
+      setTransactions((prev) => [created, ...prev])
+      const nextAccounts = await accountsApi.listAccounts()
+      setAccounts(nextAccounts.map((item, index) => decorateAccount(item, index)))
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось создать операцию') }
+    }
+  }, [])
 
   const value = useMemo(
     () => ({
       accounts,
       categories,
       transactions,
-      weeklyExpenses: MOCK_WEEKLY_EXPENSES,
+      weeklyExpenses,
       totalBalance,
       monthIncome,
       monthExpense,
+      loading,
+      error,
+      refresh,
       addAccount,
       removeAccount,
       addCategory,
@@ -212,9 +225,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accounts,
       categories,
       transactions,
+      weeklyExpenses,
       totalBalance,
       monthIncome,
       monthExpense,
+      loading,
+      error,
+      refresh,
       addAccount,
       removeAccount,
       addCategory,

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -37,11 +38,28 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config file: %w", err)
 	}
 
+	cfg.applyEnvOverrides()
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) applyEnvOverrides() {
+	if value := strings.TrimSpace(os.Getenv("SERVER_PORT")); value != "" {
+		c.Server.Port = value
+	}
+	if value := strings.TrimSpace(os.Getenv("DATABASE_URL")); value != "" {
+		c.Database.URL = value
+	}
+	if value := strings.TrimSpace(os.Getenv("JWT_SECRET")); value != "" {
+		c.JWT.Secret = value
+	}
+	if value := strings.TrimSpace(os.Getenv("JWT_ISSUER")); value != "" {
+		c.JWT.Issuer = value
+	}
 }
 
 func (c *Config) validate() error {
@@ -52,10 +70,10 @@ func (c *Config) validate() error {
 		return fmt.Errorf("jwt.secret must be at least 32 characters long")
 	}
 	if c.JWT.Issuer == "" {
-		c.JWT.Issuer = "spend-app"
+		c.JWT.Issuer = "auth-app"
 	}
 	if c.Server.Port == "" {
-		c.Server.Port = "8081"
+		c.Server.Port = "8082"
 	}
 	return nil
 }

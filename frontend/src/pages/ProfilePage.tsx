@@ -32,8 +32,8 @@ export function ProfilePage() {
         <button
           type="button"
           className="menu-item"
-          onClick={() => {
-            logout()
+          onClick={async () => {
+            await logout()
             navigate('/login', { replace: true })
           }}
         >

@@ -4,9 +4,10 @@ import { IconTrash } from '../components/Icons'
 import { useFinance } from '../context/FinanceContext'
 
 export function CategoriesPage() {
-  const { categories, addCategory, updateCategory, removeCategory } = useFinance()
+  const { categories, addCategory, updateCategory, removeCategory, loading, error } = useFinance()
   const [createOpen, setCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
 
   const editing = categories.find((c) => c.id === editId)
 
@@ -14,6 +15,9 @@ export function CategoriesPage() {
     <>
       <h1 className="page-title">Категории</h1>
       <p className="page-subtitle">Для доходов и расходов</p>
+      {loading ? <p className="page-subtitle">Загрузка…</p> : null}
+      {error ? <p className="form-error">{error}</p> : null}
+      {actionError ? <p className="form-error">{actionError}</p> : null}
 
       <div className="page-actions">
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
@@ -48,7 +52,10 @@ export function CategoriesPage() {
                 type="button"
                 className="icon-action danger"
                 aria-label={`Удалить ${category.name}`}
-                onClick={() => removeCategory(category.id)}
+                onClick={async () => {
+                  const result = await removeCategory(category.id)
+                  if (!result.ok) setActionError(result.message)
+                }}
               >
                 <IconTrash width={16} height={16} />
               </button>
@@ -60,7 +67,7 @@ export function CategoriesPage() {
       <CategoryFormModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onSubmit={(name) => addCategory({ name })}
+        onSubmit={async (name) => addCategory({ name })}
       />
 
       <CategoryFormModal
@@ -68,8 +75,9 @@ export function CategoriesPage() {
         title="Изменить категорию"
         initialName={editing?.name ?? ''}
         onClose={() => setEditId(null)}
-        onSubmit={(name) => {
-          if (editId) updateCategory(editId, name)
+        onSubmit={async (name) => {
+          if (!editId) return { ok: false as const, message: 'Категория не найдена' }
+          return updateCategory(editId, name)
         }}
       />
     </>

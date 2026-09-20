@@ -6,9 +6,10 @@ import { getRootAccounts, getSubAccounts } from '../utils/accounts'
 import { formatMoney } from '../utils/format'
 
 export function AccountsPage() {
-  const { accounts, totalBalance, addAccount, removeAccount } = useFinance()
+  const { accounts, totalBalance, addAccount, removeAccount, loading, error } = useFinance()
   const [open, setOpen] = useState(false)
   const [parentForSub, setParentForSub] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
 
   const roots = useMemo(() => getRootAccounts(accounts), [accounts])
 
@@ -16,6 +17,9 @@ export function AccountsPage() {
     <>
       <h1 className="page-title">Счета</h1>
       <p className="page-subtitle">Всего: {formatMoney(totalBalance)}</p>
+      {loading ? <p className="page-subtitle">Загрузка…</p> : null}
+      {error ? <p className="form-error">{error}</p> : null}
+      {actionError ? <p className="form-error">{actionError}</p> : null}
 
       <div className="page-actions">
         <button
@@ -46,14 +50,20 @@ export function AccountsPage() {
                     setParentForSub(account.id)
                     setOpen(true)
                   }}
-                  onDelete={() => removeAccount(account.id)}
+                  onDelete={async () => {
+                    const result = await removeAccount(account.id)
+                    if (!result.ok) setActionError(result.message)
+                  }}
                 />
                 {subs.map((sub) => (
                   <AccountRow
                     key={sub.id}
                     account={sub}
                     nested
-                    onDelete={() => removeAccount(sub.id)}
+                    onDelete={async () => {
+                      const result = await removeAccount(sub.id)
+                      if (!result.ok) setActionError(result.message)
+                    }}
                   />
                 ))}
               </div>
