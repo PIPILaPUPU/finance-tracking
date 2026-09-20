@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { Account, Category, CreateTransactionRequest, TransactionType } from '../types'
 import { accountLabel } from '../utils/accounts'
+import { parseMoneyInput } from '../utils/format'
 import { Modal } from './Modal'
 
 interface TransactionFormModalProps {
@@ -42,20 +43,20 @@ export function TransactionFormModal({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const value = Number(amount)
     if (!description.trim()) {
       setError('Добавьте описание')
       return
     }
-    if (!Number.isFinite(value) || value <= 0) {
-      setError('Сумма должна быть больше 0')
+    const amountMinor = parseMoneyInput(amount)
+    if (amountMinor === null || amountMinor <= 0) {
+      setError('Сумма должна быть больше 0 (можно с копейками, например 199.99)')
       return
     }
 
     setSubmitting(true)
     const result = await onSubmit({
       type,
-      amount: Math.round(value),
+      amount: amountMinor,
       description: description.trim(),
       from_account_id: fromAccountId || undefined,
       to_account_id: toAccountId || undefined,
@@ -106,10 +107,11 @@ export function TransactionFormModal({
           <input
             id="tx-amount"
             type="number"
-            min={1}
+            min={0.01}
+            step={0.01}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="1000"
+            placeholder="199.99"
           />
         </div>
 

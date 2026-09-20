@@ -40,6 +40,7 @@ export interface Account {
   name: string
   type: string
   currency: Currency
+  /** Minor units (kopecks/cents). */
   balance: number
   parent_id: string | null
   allocation_rule?: AllocationRule
@@ -71,6 +72,7 @@ export interface Transaction {
   from_account_id: string
   to_account_id: string
   category_id: string
+  /** Minor units (kopecks/cents). */
   amount: number
   description: string
   created_at: string
@@ -91,6 +93,7 @@ export interface CreateAccountRequest {
   name: string
   type: string
   currency: Currency
+  /** Minor units (kopecks/cents). */
   balance: number
   parent_id?: string | null
   allocation_rule?: AllocationRule
@@ -106,6 +109,7 @@ export interface CreateTransactionRequest {
   from_account_id?: string
   to_account_id?: string
   category_id?: string
+  /** Minor units (kopecks/cents). */
   amount: number
   description: string
 }

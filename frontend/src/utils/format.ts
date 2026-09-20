@@ -7,21 +7,42 @@ const currencySymbols: Partial<Record<Currency, string>> = {
   GBP: '£',
 }
 
-export function formatMoney(amount: number, currency: Currency = 'RUB'): string {
-  const abs = Math.abs(Math.round(amount))
-  const formatted = abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+/** API stores money in minor units (kopecks/cents). */
+export function toMinor(major: number): number {
+  return Math.round(major * 100)
+}
+
+export function toMajor(minor: number): number {
+  return minor / 100
+}
+
+/** Format minor-unit amount as `1 234,56 ₽`. */
+export function formatMoney(amountMinor: number, currency: Currency = 'RUB'): string {
+  const major = toMajor(Math.abs(amountMinor))
+  const formatted = major.toLocaleString('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
   const symbol = currencySymbols[currency] ?? currency
   return `${formatted} ${symbol}`
 }
 
 export function formatSignedMoney(
-  amount: number,
+  amountMinor: number,
   type: TransactionType,
   currency: Currency = 'RUB',
 ): string {
-  if (type === 'income') return `+${formatMoney(amount, currency)}`
-  if (type === 'expanse') return `-${formatMoney(amount, currency)}`
-  return formatMoney(amount, currency)
+  if (type === 'income') return `+${formatMoney(amountMinor, currency)}`
+  if (type === 'expanse') return `-${formatMoney(amountMinor, currency)}`
+  return formatMoney(amountMinor, currency)
+}
+
+export function parseMoneyInput(value: string): number | null {
+  const normalized = value.trim().replace(/\s/g, '').replace(',', '.')
+  if (!normalized) return null
+  const major = Number(normalized)
+  if (!Number.isFinite(major)) return null
+  return toMinor(major)
 }
 
 export function greetingByTime(date = new Date()): string {
