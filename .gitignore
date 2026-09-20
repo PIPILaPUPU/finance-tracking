@@ -1,0 +1,46 @@
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Go build artifacts
+/bin/
+/build/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Local environment / secrets
+.env
+.env.*
+config.yaml
+*.pem
+*.key
+*.crt
+
+# Logs and temp files
+*.log
+/tmp/
+temp/
+tmp/
+.cache/
+*.tmp
+
+# Docker local data
+/docker/data/
+/docker/volumes/
+
+# Database 
+connect-to-db.bash

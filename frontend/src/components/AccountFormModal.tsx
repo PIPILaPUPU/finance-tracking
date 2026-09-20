@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Account, AllocationRule, CreateAccountRequest, Currency } from '../types'
 import { getRootAccounts } from '../utils/accounts'
+import { formatMoney, parseMoneyInput } from '../utils/format'
 import { Modal } from './Modal'
 
 const CURRENCIES: Currency[] = ['RUB', 'USD', 'EUR', 'GBP', 'CNY']
@@ -89,7 +90,7 @@ export function AccountFormModal({
     }
 
     const isSub = Boolean(parentId)
-    let amount = Number(balance)
+    let amountMinor = 0
     let percentValue: number | null = null
 
     if (isSub && allocationRule === 'percent') {
@@ -98,14 +99,18 @@ export function AccountFormModal({
         setError('Процент должен быть от 1 до 100')
         return
       }
-      amount = Math.round(((parent?.balance ?? 0) * percentValue) / 100)
-      if (amount <= 0) {
+      amountMinor = Math.round(((parent?.balance ?? 0) * percentValue) / 100)
+      if (amountMinor <= 0) {
         setError('Процент от баланса родителя должен быть больше 0')
         return
       }
-    } else if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Баланс должен быть больше 0')
-      return
+    } else {
+      const parsed = parseMoneyInput(balance)
+      if (parsed === null || parsed <= 0) {
+        setError('Сумма должна быть больше 0 (можно с копейками, например 1000.50)')
+        return
+      }
+      amountMinor = parsed
     }
 
     setSubmitting(true)
@@ -114,7 +119,7 @@ export function AccountFormModal({
       name: name.trim(),
       type: isSub ? 'subaccount' : type.trim(),
       currency: parent?.currency ?? currency,
-      balance: Math.round(amount),
+      balance: amountMinor,
       parent_id: parentId || null,
       allocation_rule: isSub ? allocationRule : undefined,
       percent: isSub && allocationRule === 'percent' ? percentValue : undefined,
@@ -136,6 +141,7 @@ export function AccountFormModal({
     isSub && allocationRule === 'percent' && parent
       ? Math.round((parent.balance * Number(percent || 0)) / 100)
       : null
+  const previewCurrency = parent?.currency ?? currency
 
   return (
     <Modal
@@ -237,7 +243,9 @@ export function AccountFormModal({
               onChange={(e) => setPercent(e.target.value)}
             />
             {previewPercentAmount !== null ? (
-              <p className="field-hint">Будет выделено: {previewPercentAmount}</p>
+              <p className="field-hint">
+                Будет выделено: {formatMoney(previewPercentAmount, previewCurrency)}
+              </p>
             ) : null}
           </div>
         ) : (
@@ -246,9 +254,11 @@ export function AccountFormModal({
             <input
               id="acc-balance"
               type="number"
-              min={1}
+              min={0.01}
+              step={0.01}
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
+              placeholder="1000.50"
             />
           </div>
         )}

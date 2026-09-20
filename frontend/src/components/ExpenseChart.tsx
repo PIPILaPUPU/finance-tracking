@@ -1,3 +1,5 @@
+import { formatMoney } from '../utils/format'
+
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 interface ExpenseChartProps {
@@ -20,7 +22,7 @@ export function ExpenseChart({ values, periodLabel = 'Сентябрь' }: Expen
             <div
               className="bar"
               style={{ height: `${Math.max(10, (value / max) * 100)}%` }}
-              title={`${DAYS[i]}: ${value}`}
+              title={`${DAYS[i]}: ${formatMoney(value)}`}
             />
             <span className="bar-label">{DAYS[i]}</span>
           </div>
