@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/auth"
 	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/model"
@@ -37,7 +38,7 @@ func NewTransactionHandler(tranService accountService, log slog.Logger) *Account
 func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
 
@@ -60,11 +61,9 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
-
-	var accountList []model.Account
 
 	accountList, err := h.service.GetAll(r.Context(), Claims.UserID)
 	if err != nil {
@@ -78,13 +77,13 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
 
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		writeError(w, http.StatusBadRequest, "invalid_request", "некорректный id счёта")
 		return
 	}
 
@@ -100,13 +99,13 @@ func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *AccountHandler) GetSubAccounts(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
 
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		writeError(w, http.StatusBadRequest, "invalid_request", "некорректный id счёта")
 		return
 	}
 
@@ -122,13 +121,13 @@ func (h *AccountHandler) GetSubAccounts(w http.ResponseWriter, r *http.Request) 
 func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
 
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		writeError(w, http.StatusBadRequest, "invalid_request", "некорректный id счёта")
 		return
 	}
 
@@ -150,13 +149,13 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	Claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "требуется авторизация")
 		return
 	}
 
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		writeError(w, http.StatusBadRequest, "invalid_request", "некорректный id счёта")
 		return
 	}
 
@@ -166,7 +165,7 @@ func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, "Success")
+	writeJSON(w, http.StatusOK, "Успешно")
 }
 
 // =======================================JSON=============================================
@@ -175,10 +174,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&target); err != nil {
-		return err
+		return errors.New("некорректный JSON в теле запроса")
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("request body must contain one JSON object")
+		return errors.New("в теле запроса должен быть один JSON-объект")
 	}
 
 	return nil
@@ -192,16 +191,26 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
+func publicErrorMessage(err error) string {
+	msg := err.Error()
+	if idx := strings.Index(msg, ": "); idx >= 0 {
+		return strings.TrimSpace(msg[idx+2:])
+	}
+	return msg
+}
+
 func writeHTTPError(w http.ResponseWriter, err error) {
 	switch {
 	case err == nil:
-		writeError(w, http.StatusInternalServerError, "internal_server_error", "internal server error")
+		writeError(w, http.StatusInternalServerError, "internal_server_error", "внутренняя ошибка сервера")
+	case errors.Is(err, accountservice.ErrNameExists):
+		writeError(w, http.StatusConflict, "name_exists", publicErrorMessage(err))
 	case errors.Is(err, accountservice.ErrInvalidRequest):
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_request", publicErrorMessage(err))
 	case errors.Is(err, accountservice.ErrAccountNotFound):
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", publicErrorMessage(err))
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_server_error", "internal server error")
+		writeError(w, http.StatusInternalServerError, "internal_server_error", "внутренняя ошибка сервера")
 	}
 }
 

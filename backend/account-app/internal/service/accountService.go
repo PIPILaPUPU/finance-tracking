@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	ErrAccountNotFound = errors.New("account not found")
-	ErrInvalidRequest  = errors.New("invalid request")
+	ErrAccountNotFound = errors.New("счёт не найден")
+	ErrInvalidRequest  = errors.New("некорректный запрос")
+	ErrNameExists      = errors.New("счёт с таким названием уже существует")
 )
 
 type AccountService struct {
@@ -24,6 +25,19 @@ type AccountService struct {
 
 func NewTransactionService(repository repository.AccountRepository) *AccountService {
 	return &AccountService{rep: repository}
+}
+
+func mapRepoError(err error) error {
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		return ErrAccountNotFound
+	case errors.Is(err, repository.ErrNameExists):
+		return ErrNameExists
+	case errors.Is(err, pgx.ErrNoRows):
+		return ErrAccountNotFound
+	default:
+		return err
+	}
 }
 
 // ======================================SERVICE FUNCTION=============================================
@@ -59,7 +73,7 @@ func (s *AccountService) createRootAccount(ctx context.Context, userId uuid.UUID
 
 	created, err := s.rep.Create(ctx, userId, account)
 	if err != nil {
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	return created, nil
@@ -68,14 +82,11 @@ func (s *AccountService) createRootAccount(ctx context.Context, userId uuid.UUID
 func (s *AccountService) createSubAccount(ctx context.Context, userId uuid.UUID, request model.CreateAccountRequest) (model.Account, error) {
 	parent, err := s.rep.GetById(ctx, userId, *request.ParentID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	if parent.ParentID != nil {
-		return model.Account{}, fmt.Errorf("%w: sub-account cannot be nested under another sub-account", ErrInvalidRequest)
+		return model.Account{}, fmt.Errorf("%w: субсчёт нельзя вложить в другой субсчёт", ErrInvalidRequest)
 	}
 
 	rule := request.AllocationRule
@@ -100,10 +111,10 @@ func (s *AccountService) createSubAccount(ctx context.Context, userId uuid.UUID,
 	allocated := sumEffectiveBalances(existing, parent.Balance)
 	if allocated+balance > parent.Balance {
 		return model.Account{}, fmt.Errorf(
-			"%w: sum of sub-accounts (%d) would exceed parent balance (%d)",
+			"%w: сумма субсчетов (%.2f) превысит баланс основного счёта (%.2f)",
 			ErrInvalidRequest,
-			allocated+balance,
-			parent.Balance,
+			float64(allocated+balance)/100,
+			float64(parent.Balance)/100,
 		)
 	}
 
@@ -121,7 +132,7 @@ func (s *AccountService) createSubAccount(ctx context.Context, userId uuid.UUID,
 
 	created, err := s.rep.Create(ctx, userId, account)
 	if err != nil {
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	return applyEffectiveBalance(created, parent.Balance), nil
@@ -139,19 +150,13 @@ func (s *AccountService) GetAll(ctx context.Context, userId uuid.UUID) ([]model.
 func (s *AccountService) GetByID(ctx context.Context, userId uuid.UUID, accountID uuid.UUID) (model.Account, error) {
 	account, err := s.rep.GetById(ctx, userId, accountID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	if account.ParentID != nil && account.AllocationRule == model.AllocationPercent && account.Percent != nil {
 		parent, err := s.rep.GetById(ctx, userId, *account.ParentID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-				return model.Account{}, ErrAccountNotFound
-			}
-			return model.Account{}, err
+			return model.Account{}, mapRepoError(err)
 		}
 		account = applyEffectiveBalance(account, parent.Balance)
 	}
@@ -162,14 +167,11 @@ func (s *AccountService) GetByID(ctx context.Context, userId uuid.UUID, accountI
 func (s *AccountService) GetSubAccounts(ctx context.Context, userId uuid.UUID, parentID uuid.UUID) ([]model.Account, error) {
 	parent, err := s.rep.GetById(ctx, userId, parentID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return nil, ErrAccountNotFound
-		}
-		return nil, err
+		return nil, mapRepoError(err)
 	}
 
 	if parent.ParentID != nil {
-		return nil, fmt.Errorf("%w: account is a sub-account", ErrInvalidRequest)
+		return nil, fmt.Errorf("%w: это субсчёт, а не основной счёт", ErrInvalidRequest)
 	}
 
 	subs, err := s.rep.GetByParentID(ctx, userId, parentID)
@@ -190,39 +192,30 @@ func (s *AccountService) Update(ctx context.Context, userId uuid.UUID, accountID
 
 	account, err := s.rep.GetById(ctx, userId, accountID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	if request.Name == "" {
-		return model.Account{}, fmt.Errorf("%w: name is required", ErrInvalidRequest)
+		return model.Account{}, fmt.Errorf("%w: укажите название счёта", ErrInvalidRequest)
 	}
 
 	updated, err := s.rep.UpdateName(ctx, userId, accountID, model.UpdateAccountName{Name: request.Name})
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	allocationTouched := request.AllocationRule != "" || request.Balance > 0 || request.Percent != nil
 
 	if account.ParentID == nil {
 		if allocationTouched {
-			return model.Account{}, fmt.Errorf("%w: allocation fields are only allowed for sub-accounts", ErrInvalidRequest)
+			return model.Account{}, fmt.Errorf("%w: сумма и процент доступны только для субсчетов", ErrInvalidRequest)
 		}
 		return updated, nil
 	}
 
 	parent, err := s.rep.GetById(ctx, userId, *account.ParentID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	if !allocationTouched {
@@ -263,19 +256,16 @@ func (s *AccountService) Update(ctx context.Context, userId uuid.UUID, accountID
 	}
 	if allocated+balance > parent.Balance {
 		return model.Account{}, fmt.Errorf(
-			"%w: sum of sub-accounts (%d) would exceed parent balance (%d)",
+			"%w: сумма субсчетов (%.2f) превысит баланс основного счёта (%.2f)",
 			ErrInvalidRequest,
-			allocated+balance,
-			parent.Balance,
+			float64(allocated+balance)/100,
+			float64(parent.Balance)/100,
 		)
 	}
 
 	updated, err = s.rep.UpdateSubAccount(ctx, userId, accountID, balance, rule, percent)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return model.Account{}, ErrAccountNotFound
-		}
-		return model.Account{}, err
+		return model.Account{}, mapRepoError(err)
 	}
 
 	return applyEffectiveBalance(updated, parent.Balance), nil
@@ -284,39 +274,35 @@ func (s *AccountService) Update(ctx context.Context, userId uuid.UUID, accountID
 func (s *AccountService) Delete(ctx context.Context, userId uuid.UUID, accountID uuid.UUID) error {
 	err := s.rep.Delete(ctx, userId, accountID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
-			return ErrAccountNotFound
-		}
-		return err
+		return mapRepoError(err)
 	}
-
 	return nil
 }
 
 // ======================================VALIDATION=============================================
 func validateRootRequest(req model.CreateAccountRequest) error {
 	if req.Name == "" {
-		return errors.New("name is required")
+		return errors.New("укажите название счёта")
 	}
 
 	if req.Type == "" {
-		return errors.New("type is required")
+		return errors.New("укажите тип счёта")
 	}
 
 	if !slices.Contains(AvailableCurrencies, req.Currency) {
-		return errors.New("invalid currency")
+		return errors.New("некорректная валюта")
 	}
 
 	if req.Balance <= 0 {
-		return errors.New("balance must be greater than 0")
+		return errors.New("баланс должен быть больше 0")
 	}
 
 	if req.AllocationRule != "" && req.AllocationRule != model.AllocationManual {
-		return errors.New("allocation_rule is only allowed for sub-accounts")
+		return errors.New("правило распределения доступно только для субсчетов")
 	}
 
 	if req.Percent != nil {
-		return errors.New("percent is only allowed for sub-accounts")
+		return errors.New("процент доступен только для субсчетов")
 	}
 
 	return nil
@@ -324,26 +310,26 @@ func validateRootRequest(req model.CreateAccountRequest) error {
 
 func validateSubRequest(req model.CreateAccountRequest, rule string) error {
 	if req.Name == "" {
-		return errors.New("name is required")
+		return errors.New("укажите название счёта")
 	}
 
 	switch rule {
 	case model.AllocationManual:
 		if req.Balance <= 0 {
-			return errors.New("balance must be greater than 0")
+			return errors.New("сумма должна быть больше 0")
 		}
 		if req.Percent != nil {
-			return errors.New("percent must be empty for manual allocation")
+			return errors.New("для ручного распределения процент указывать не нужно")
 		}
 	case model.AllocationPercent:
 		if req.Percent == nil {
-			return errors.New("percent is required for percent allocation")
+			return errors.New("укажите процент от основного счёта")
 		}
 		if *req.Percent < 1 || *req.Percent > 100 {
-			return errors.New("percent must be between 1 and 100")
+			return errors.New("процент должен быть от 1 до 100")
 		}
 	default:
-		return errors.New("allocation_rule must be manual or percent")
+		return errors.New("правило распределения: manual или percent")
 	}
 
 	return nil
@@ -356,12 +342,12 @@ func resolveSubBalance(parentBalance int64, rule string, req model.CreateAccount
 	case model.AllocationPercent:
 		balance := parentBalance * int64(*req.Percent) / 100
 		if balance <= 0 {
-			return 0, nil, errors.New("percent of parent balance must be greater than 0")
+			return 0, nil, errors.New("процент от баланса основного счёта должен быть больше 0")
 		}
 		percent := *req.Percent
 		return balance, &percent, nil
 	default:
-		return 0, nil, errors.New("allocation_rule must be manual or percent")
+		return 0, nil, errors.New("правило распределения: manual или percent")
 	}
 }
 
