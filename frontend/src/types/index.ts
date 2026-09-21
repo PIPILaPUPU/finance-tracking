@@ -100,17 +100,6 @@ export interface CreateAccountRequest {
   percent?: number | null
 }
 
-export interface UpdateAccountNameRequest {
-  name: string
-}
-
-export interface UpdateSubAccountRequest {
-  allocation_rule: AllocationRule
-  /** Minor units (kopecks/cents). Used for manual allocation. */
-  balance?: number
-  percent?: number | null
-}
-
 export interface CreateCategoryRequest {
   name: string
 }

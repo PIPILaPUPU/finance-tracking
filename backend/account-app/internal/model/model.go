@@ -34,14 +34,3 @@ type CreateAccountRequest struct {
 	AllocationRule string     `json:"allocation_rule"`
 	Percent        *int       `json:"percent"`
 }
-
-type UpdateAccountName struct {
-	Name string `json:"name"`
-}
-
-type UpdateSubAccountRequest struct {
-	AllocationRule string `json:"allocation_rule"`
-	Balance        int64  `json:"balance"`
-	Percent        *int   `json:"percent"`
-}
-
