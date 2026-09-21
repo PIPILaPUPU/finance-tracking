@@ -13,12 +13,14 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("Account not found")
-	accountColumns    = `id, userid, name, type, currency, balance, parent_id, allocation_rule, percent, created_at, updated_at`
+	ErrNotFound    = errors.New("Account not found")
+	accountColumns = `id, userid, name, type, currency, balance, parent_id, allocation_rule, percent, created_at, updated_at`
 )
 
 type AccountRepository interface {
 	Create(context.Context, uuid.UUID, model.Account) (model.Account, error)
+	UpdateName(context.Context, uuid.UUID, uuid.UUID, model.UpdateAccountName) (model.Account, error)
+	UpdateSubAccount(context.Context, uuid.UUID, uuid.UUID, model.Account) (model.Account, error)
 	GetAll(context.Context, uuid.UUID) ([]model.Account, error)
 	GetById(context.Context, uuid.UUID, uuid.UUID) (model.Account, error)
 	GetByParentID(context.Context, uuid.UUID, uuid.UUID) ([]model.Account, error)
@@ -94,6 +96,55 @@ func (r *PostgreAccountRepository) Create(ctx context.Context,
 	account, err := scanAccount(row)
 	if err != nil {
 		return model.Account{}, fmt.Errorf("create item: %w", err)
+	}
+	return account, nil
+}
+
+func (r *PostgreAccountRepository) UpdateName(
+	ctx context.Context,
+	userID uuid.UUID,
+	accountID uuid.UUID,
+	req model.UpdateAccountName,
+) (model.Account, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE Accounts
+		SET name = $1, updated_at = NOW()
+		WHERE id = $2 AND userid = $3
+		RETURNING `+accountColumns+`
+	`, req.Name, accountID, userID)
+
+	account, err := scanAccount(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.Account{}, ErrNotFound
+	}
+	if err != nil {
+		return model.Account{}, fmt.Errorf("update name: %w", err)
+	}
+	return account, nil
+}
+
+func (r *PostgreAccountRepository) UpdateSubAccount(
+	ctx context.Context,
+	userID uuid.UUID,
+	accountID uuid.UUID,
+	req model.Account,
+) (model.Account, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE Accounts
+		SET balance = $1,
+			allocation_rule = $2,
+			percent = $3,
+			updated_at = NOW()
+		WHERE id = $4 AND userid = $5 AND parent_id IS NOT NULL
+		RETURNING `+accountColumns+`
+	`, req.Balance, req.AllocationRule, req.Percent, accountID, userID)
+
+	account, err := scanAccount(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.Account{}, ErrNotFound
+	}
+	if err != nil {
+		return model.Account{}, fmt.Errorf("update sub-account: %w", err)
 	}
 	return account, nil
 }

@@ -39,11 +39,13 @@ export function AccountRow({
   account,
   onDelete,
   onAddSub,
+  onEdit,
   nested = false,
 }: {
   account: Account
   onDelete?: () => void
   onAddSub?: () => void
+  onEdit?: () => void
   nested?: boolean
 }) {
   return (
@@ -54,11 +56,20 @@ export function AccountRow({
       <div className="meta">
         <h3>{account.name}</h3>
         <p>
-          {nested ? 'Субсчёт' : account.type}
+          {nested
+            ? account.allocation_rule === 'percent' && account.percent != null
+              ? `Субсчёт · ${account.percent}%`
+              : 'Субсчёт'
+            : account.type}
           {account.mask ? ` · •••• ${account.mask}` : ''}
         </p>
       </div>
       <div className="amount">{formatMoney(account.balance, account.currency)}</div>
+      {onEdit ? (
+        <button type="button" className="icon-action" onClick={onEdit} aria-label="Редактировать">
+          ✎
+        </button>
+      ) : null}
       {onAddSub ? (
         <button type="button" className="icon-action" onClick={onAddSub} aria-label="Добавить субсчёт">
           +

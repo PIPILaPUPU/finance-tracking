@@ -18,6 +18,7 @@ import type {
   CreateCategoryRequest,
   CreateTransactionRequest,
   Transaction,
+  UpdateSubAccountRequest,
 } from '../types'
 import { getRootAccounts } from '../utils/accounts'
 import {
@@ -40,6 +41,14 @@ interface FinanceContextValue {
   refresh: () => Promise<void>
   addAccount: (
     data: CreateAccountRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  updateAccountName: (
+    id: string,
+    name: string,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  updateSubAccount: (
+    id: string,
+    data: UpdateSubAccountRequest,
   ) => Promise<{ ok: true } | { ok: false; message: string }>
   removeAccount: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
   addCategory: (
@@ -130,6 +139,34 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const updateAccountName = useCallback(async (id: string, name: string) => {
+    try {
+      const updated = await accountsApi.updateAccountName(id, { name })
+      setAccounts((prev) =>
+        prev.map((account, index) =>
+          account.id === id ? decorateAccount({ ...account, ...updated }, index) : account,
+        ),
+      )
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось переименовать счёт') }
+    }
+  }, [])
+
+  const updateSubAccount = useCallback(async (id: string, data: UpdateSubAccountRequest) => {
+    try {
+      const updated = await accountsApi.updateSubAccountAllocation(id, data)
+      setAccounts((prev) =>
+        prev.map((account, index) =>
+          account.id === id ? decorateAccount({ ...account, ...updated }, index) : account,
+        ),
+      )
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось обновить субсчёт') }
+    }
+  }, [])
+
   const removeAccount = useCallback(async (id: string) => {
     try {
       await accountsApi.deleteAccount(id)
@@ -215,6 +252,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      updateAccountName,
+      updateSubAccount,
       removeAccount,
       addCategory,
       updateCategory,
@@ -233,6 +272,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      updateAccountName,
+      updateSubAccount,
       removeAccount,
       addCategory,
       updateCategory,

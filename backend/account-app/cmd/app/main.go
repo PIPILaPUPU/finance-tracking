@@ -74,6 +74,8 @@ func run() error {
 	r.Get("/accounts", accHandler.GetAll)
 	r.Get("/accounts/{id}", accHandler.GetByID)
 	r.Get("/accounts/{id}/sub-accounts", accHandler.GetSubAccounts)
+	r.Patch("/accounts/{id}/name", accHandler.UpdateName)
+	r.Patch("/accounts/{id}/allocation", accHandler.UpdateSubAccount)
 	r.Delete("/accounts/{id}", accHandler.Delete)
 
 	//==============================SERVER==================================
