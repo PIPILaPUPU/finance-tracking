@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react'
 import { AccountFormModal } from '../components/AccountFormModal'
 import { AccountRow } from '../components/AccountCard'
+import { EditAccountModal } from '../components/EditAccountModal'
 import { useFinance } from '../context/FinanceContext'
 import { getRootAccounts, getSubAccounts } from '../utils/accounts'
 import { formatMoney } from '../utils/format'
 
 export function AccountsPage() {
-  const { accounts, totalBalance, addAccount, removeAccount, loading, error } = useFinance()
+  const { accounts, totalBalance, addAccount, updateAccount, removeAccount, loading, error } =
+    useFinance()
   const [open, setOpen] = useState(false)
   const [parentForSub, setParentForSub] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
   const [actionError, setActionError] = useState('')
 
   const roots = useMemo(() => getRootAccounts(accounts), [accounts])
+  const editing = editId ? accounts.find((a) => a.id === editId) ?? null : null
 
   return (
     <>
@@ -46,6 +50,7 @@ export function AccountsPage() {
               <div key={account.id} className="account-group">
                 <AccountRow
                   account={account}
+                  onEdit={() => setEditId(account.id)}
                   onAddSub={() => {
                     setParentForSub(account.id)
                     setOpen(true)
@@ -60,6 +65,7 @@ export function AccountsPage() {
                     key={sub.id}
                     account={sub}
                     nested
+                    onEdit={() => setEditId(sub.id)}
                     onDelete={async () => {
                       const result = await removeAccount(sub.id)
                       if (!result.ok) setActionError(result.message)
@@ -81,6 +87,14 @@ export function AccountsPage() {
           setParentForSub(null)
         }}
         onSubmit={addAccount}
+      />
+
+      <EditAccountModal
+        open={Boolean(editing)}
+        account={editing}
+        accounts={accounts}
+        onClose={() => setEditId(null)}
+        onSubmit={updateAccount}
       />
     </>
   )

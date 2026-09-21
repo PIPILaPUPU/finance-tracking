@@ -184,6 +184,103 @@ func (s *AccountService) GetSubAccounts(ctx context.Context, userId uuid.UUID, p
 	return subs, nil
 }
 
+func (s *AccountService) Update(ctx context.Context, userId uuid.UUID, accountID uuid.UUID, request model.UpdateAccountRequest) (model.Account, error) {
+	request.Name = strings.TrimSpace(request.Name)
+	request.AllocationRule = strings.TrimSpace(strings.ToLower(request.AllocationRule))
+
+	account, err := s.rep.GetById(ctx, userId, accountID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
+			return model.Account{}, ErrAccountNotFound
+		}
+		return model.Account{}, err
+	}
+
+	if request.Name == "" {
+		return model.Account{}, fmt.Errorf("%w: name is required", ErrInvalidRequest)
+	}
+
+	updated, err := s.rep.UpdateName(ctx, userId, accountID, model.UpdateAccountName{Name: request.Name})
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return model.Account{}, ErrAccountNotFound
+		}
+		return model.Account{}, err
+	}
+
+	allocationTouched := request.AllocationRule != "" || request.Balance > 0 || request.Percent != nil
+
+	if account.ParentID == nil {
+		if allocationTouched {
+			return model.Account{}, fmt.Errorf("%w: allocation fields are only allowed for sub-accounts", ErrInvalidRequest)
+		}
+		return updated, nil
+	}
+
+	parent, err := s.rep.GetById(ctx, userId, *account.ParentID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
+			return model.Account{}, ErrAccountNotFound
+		}
+		return model.Account{}, err
+	}
+
+	if !allocationTouched {
+		return applyEffectiveBalance(updated, parent.Balance), nil
+	}
+
+	rule := request.AllocationRule
+	if rule == "" {
+		rule = updated.AllocationRule
+	}
+
+	subReq := model.CreateAccountRequest{
+		Name:           request.Name,
+		Balance:        request.Balance,
+		AllocationRule: rule,
+		Percent:        request.Percent,
+	}
+	if err := validateSubRequest(subReq, rule); err != nil {
+		return model.Account{}, fmt.Errorf("%w: %s", ErrInvalidRequest, err.Error())
+	}
+
+	balance, percent, err := resolveSubBalance(parent.Balance, rule, subReq)
+	if err != nil {
+		return model.Account{}, fmt.Errorf("%w: %s", ErrInvalidRequest, err.Error())
+	}
+
+	siblings, err := s.rep.GetByParentID(ctx, userId, parent.ID)
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	var allocated int64
+	for _, sibling := range siblings {
+		if sibling.ID == accountID {
+			continue
+		}
+		allocated += effectiveBalance(sibling, parent.Balance)
+	}
+	if allocated+balance > parent.Balance {
+		return model.Account{}, fmt.Errorf(
+			"%w: sum of sub-accounts (%d) would exceed parent balance (%d)",
+			ErrInvalidRequest,
+			allocated+balance,
+			parent.Balance,
+		)
+	}
+
+	updated, err = s.rep.UpdateSubAccount(ctx, userId, accountID, balance, rule, percent)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return model.Account{}, ErrAccountNotFound
+		}
+		return model.Account{}, err
+	}
+
+	return applyEffectiveBalance(updated, parent.Balance), nil
+}
+
 func (s *AccountService) Delete(ctx context.Context, userId uuid.UUID, accountID uuid.UUID) error {
 	err := s.rep.Delete(ctx, userId, accountID)
 	if err != nil {

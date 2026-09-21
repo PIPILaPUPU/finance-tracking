@@ -18,6 +18,7 @@ import type {
   CreateCategoryRequest,
   CreateTransactionRequest,
   Transaction,
+  UpdateAccountRequest,
 } from '../types'
 import { getRootAccounts } from '../utils/accounts'
 import {
@@ -40,6 +41,10 @@ interface FinanceContextValue {
   refresh: () => Promise<void>
   addAccount: (
     data: CreateAccountRequest,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  updateAccount: (
+    id: string,
+    data: UpdateAccountRequest,
   ) => Promise<{ ok: true } | { ok: false; message: string }>
   removeAccount: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
   addCategory: (
@@ -130,6 +135,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const updateAccount = useCallback(async (id: string, data: UpdateAccountRequest) => {
+    try {
+      await accountsApi.updateAccount(id, data)
+      const nextAccounts = await accountsApi.listAccounts()
+      setAccounts(nextAccounts.map((item, index) => decorateAccount(item, index)))
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось обновить счёт') }
+    }
+  }, [])
+
   const removeAccount = useCallback(async (id: string) => {
     try {
       await accountsApi.deleteAccount(id)
@@ -215,6 +231,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      updateAccount,
       removeAccount,
       addCategory,
       updateCategory,
@@ -233,6 +250,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      updateAccount,
       removeAccount,
       addCategory,
       updateCategory,
