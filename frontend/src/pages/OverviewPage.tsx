@@ -54,13 +54,17 @@ export function OverviewPage() {
           </Link>
         </div>
         <div className="accounts-scroll">
-          {rootAccounts.map((account) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              subCount={getSubAccounts(accounts, account.id).length}
-            />
-          ))}
+          {rootAccounts.map((account) => {
+            const subs = getSubAccounts(accounts, account.id)
+            return (
+              <AccountCard
+                key={account.id}
+                account={account}
+                subAccounts={subs}
+                subCount={subs.length}
+              />
+            )
+          })}
         </div>
       </section>
 

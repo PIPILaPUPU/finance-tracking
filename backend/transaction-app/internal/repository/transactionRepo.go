@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -11,7 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var transactionColumns = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description, created_at`
+var (
+	ErrAccountNotFound             = errors.New("account not found")
+	ErrInsufficientFunds           = errors.New("insufficient funds")
+	ErrFundsReservedBySubAccounts  = errors.New("funds reserved by manual sub-accounts")
+	transactionColumns   = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description, created_at`
+)
 
 type PostgreTransactionRepository struct {
 	pool   *pgxpool.Pool
@@ -97,20 +103,20 @@ func (r *PostgreTransactionRepository) GetById(ctx context.Context, userID uuid.
 func applyBalanceChanges(ctx context.Context, tx pgx.Tx, req model.Transaction) error {
 	switch req.Type {
 	case "expanse":
-		return adjustBalance(ctx, tx, req.User_id, req.From_account_id, -req.Amount)
+		return debitBalance(ctx, tx, req.User_id, req.From_account_id, req.Amount)
 	case "income":
-		return adjustBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
+		return creditBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
 	case "transfer":
-		if err := adjustBalance(ctx, tx, req.User_id, req.From_account_id, -req.Amount); err != nil {
+		if err := debitBalance(ctx, tx, req.User_id, req.From_account_id, req.Amount); err != nil {
 			return err
 		}
-		return adjustBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
+		return creditBalance(ctx, tx, req.User_id, req.To_account_id, req.Amount)
 	default:
 		return fmt.Errorf("unsupported transaction type %q", req.Type)
 	}
 }
 
-func adjustBalance(ctx context.Context, tx pgx.Tx, userID, accountID uuid.UUID, delta int64) error {
+func creditBalance(ctx context.Context, tx pgx.Tx, userID, accountID uuid.UUID, amount int64) error {
 	if accountID == uuid.Nil {
 		return fmt.Errorf("account id is required")
 	}
@@ -119,14 +125,73 @@ func adjustBalance(ctx context.Context, tx pgx.Tx, userID, accountID uuid.UUID, 
 		UPDATE Accounts
 		SET balance = balance + $1, updated_at = NOW()
 		WHERE id = $2 AND userid = $3
-	`, delta, accountID, userID)
+	`, amount, accountID, userID)
 	if err != nil {
-		return fmt.Errorf("update account balance: %w", err)
+		return fmt.Errorf("credit account: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("account not found")
+		return ErrAccountNotFound
 	}
 	return nil
+}
+
+func debitBalance(ctx context.Context, tx pgx.Tx, userID, accountID uuid.UUID, amount int64) error {
+	if accountID == uuid.Nil {
+		return fmt.Errorf("account id is required")
+	}
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE Accounts a
+		SET balance = balance - $1, updated_at = NOW()
+		WHERE a.id = $2 AND a.userid = $3
+			AND a.balance >= $1
+			AND (
+				a.parent_id IS NOT NULL
+				OR $1 <= a.balance - COALESCE((
+					SELECT SUM(s.balance)
+					FROM Accounts s
+					WHERE s.parent_id = a.id
+						AND s.userid = a.userid
+						AND s.allocation_rule = 'manual'
+				), 0)
+			)
+	`, amount, accountID, userID)
+	if err != nil {
+		return fmt.Errorf("debit account: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+
+	var balance, manualReserved int64
+	var parentID *uuid.UUID
+	err = tx.QueryRow(ctx, `
+		SELECT
+			a.balance,
+			a.parent_id,
+			COALESCE((
+				SELECT SUM(s.balance)
+				FROM Accounts s
+				WHERE s.parent_id = a.id
+					AND s.userid = a.userid
+					AND s.allocation_rule = 'manual'
+			), 0)
+		FROM Accounts a
+		WHERE a.id = $1 AND a.userid = $2
+	`, accountID, userID).Scan(&balance, &parentID, &manualReserved)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrAccountNotFound
+		}
+		return fmt.Errorf("check account: %w", err)
+	}
+	if balance < amount {
+		return ErrInsufficientFunds
+	}
+	if parentID == nil && manualReserved > 0 && amount > balance-manualReserved {
+		return ErrFundsReservedBySubAccounts
+	}
+	return ErrInsufficientFunds
 }
 
 func nullIfNilUUID(id uuid.UUID) any {
@@ -142,10 +207,10 @@ type scannable interface {
 
 func scanTransaction(row scannable) (model.Transaction, error) {
 	var (
-		t              model.Transaction
-		fromAccountID  *uuid.UUID
-		toAccountID    *uuid.UUID
-		categoryID     *uuid.UUID
+		t             model.Transaction
+		fromAccountID *uuid.UUID
+		toAccountID   *uuid.UUID
+		categoryID    *uuid.UUID
 	)
 	err := row.Scan(
 		&t.Id,

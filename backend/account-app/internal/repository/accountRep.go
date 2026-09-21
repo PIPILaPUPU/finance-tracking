@@ -9,11 +9,13 @@ import (
 	"github.com/PIPILaPUPU/finance-tracking/account-app/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
-	ErrNotFound    = errors.New("Account not found")
+	ErrNotFound   = errors.New("account not found")
+	ErrNameExists = errors.New("account name already exists")
 	accountColumns = `id, userid, name, type, currency, balance, parent_id, allocation_rule, percent, created_at, updated_at`
 )
 
@@ -72,6 +74,14 @@ func scanAccountFromRows(rows pgx.Rows) (model.Account, error) {
 	return account, err
 }
 
+func mapWriteError(op string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return ErrNameExists
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
 // =================================INTERFACE FUNCTION=======================================
 func (r *PostgreAccountRepository) Create(ctx context.Context,
 	userID uuid.UUID,
@@ -95,7 +105,7 @@ func (r *PostgreAccountRepository) Create(ctx context.Context,
 
 	account, err := scanAccount(row)
 	if err != nil {
-		return model.Account{}, fmt.Errorf("create item: %w", err)
+		return model.Account{}, mapWriteError("create account", err)
 	}
 	return account, nil
 }
@@ -113,7 +123,7 @@ func (r *PostgreAccountRepository) UpdateName(ctx context.Context, userID uuid.U
 		return model.Account{}, ErrNotFound
 	}
 	if err != nil {
-		return model.Account{}, fmt.Errorf("update name: %w", err)
+		return model.Account{}, mapWriteError("update name", err)
 	}
 	return account, nil
 }
@@ -162,7 +172,7 @@ func (r *PostgreAccountRepository) GetAll(ctx context.Context, userID uuid.UUID)
 	for rows.Next() {
 		account, err := scanAccountFromRows(rows)
 		if err != nil {
-			return nil, fmt.Errorf("get items list: %w", err)
+			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		accounts = append(accounts, account)
 	}
@@ -203,7 +213,7 @@ func (r *PostgreAccountRepository) GetByParentID(ctx context.Context, userID uui
 	for rows.Next() {
 		account, err := scanAccountFromRows(rows)
 		if err != nil {
-			return nil, fmt.Errorf("get sub-accounts: %w", err)
+			return nil, fmt.Errorf("scan sub-account: %w", err)
 		}
 		accounts = append(accounts, account)
 	}

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { AccountFormModal } from '../components/AccountFormModal'
-import { AccountRow } from '../components/AccountCard'
+import { AccountGroup } from '../components/AccountCard'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { EditAccountModal } from '../components/EditAccountModal'
 import { useFinance } from '../context/FinanceContext'
+import type { Account } from '../types'
 import { getRootAccounts, getSubAccounts } from '../utils/accounts'
 import { formatMoney } from '../utils/format'
 
@@ -12,6 +14,7 @@ export function AccountsPage() {
   const [open, setOpen] = useState(false)
   const [parentForSub, setParentForSub] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [actionError, setActionError] = useState('')
 
   const roots = useMemo(() => getRootAccounts(accounts), [accounts])
@@ -47,32 +50,22 @@ export function AccountsPage() {
           roots.map((account) => {
             const subs = getSubAccounts(accounts, account.id)
             return (
-              <div key={account.id} className="account-group">
-                <AccountRow
-                  account={account}
-                  onEdit={() => setEditId(account.id)}
-                  onAddSub={() => {
-                    setParentForSub(account.id)
-                    setOpen(true)
-                  }}
-                  onDelete={async () => {
-                    const result = await removeAccount(account.id)
-                    if (!result.ok) setActionError(result.message)
-                  }}
-                />
-                {subs.map((sub) => (
-                  <AccountRow
-                    key={sub.id}
-                    account={sub}
-                    nested
-                    onEdit={() => setEditId(sub.id)}
-                    onDelete={async () => {
-                      const result = await removeAccount(sub.id)
-                      if (!result.ok) setActionError(result.message)
-                    }}
-                  />
-                ))}
-              </div>
+              <AccountGroup
+                key={account.id}
+                account={account}
+                subAccounts={subs}
+                onEdit={() => setEditId(account.id)}
+                onAddSub={() => {
+                  setParentForSub(account.id)
+                  setOpen(true)
+                }}
+                onDelete={() => setDeleteTarget(account)}
+                onEditSub={(subId) => setEditId(subId)}
+                onDeleteSub={(subId) => {
+                  const sub = accounts.find((item) => item.id === subId)
+                  if (sub) setDeleteTarget(sub)
+                }}
+              />
             )
           })
         )}
@@ -95,6 +88,27 @@ export function AccountsPage() {
         accounts={accounts}
         onClose={() => setEditId(null)}
         onSubmit={updateAccount}
+      />
+
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.parent_id ? 'Удалить субсчёт?' : 'Удалить счёт?'}
+        message={
+          deleteTarget
+            ? deleteTarget.parent_id
+              ? `Вы уверены, что хотите удалить субсчёт «${deleteTarget.name}»? Это действие нельзя отменить.`
+              : getSubAccounts(accounts, deleteTarget.id).length > 0
+                ? `Вы уверены, что хотите удалить счёт «${deleteTarget.name}»? Все субсчета также будут удалены.`
+                : `Вы уверены, что хотите удалить счёт «${deleteTarget.name}»? Это действие нельзя отменить.`
+            : ''
+        }
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return { ok: false as const, message: 'Счёт не найден' }
+          const result = await removeAccount(deleteTarget.id)
+          if (!result.ok) setActionError(result.message)
+          return result
+        }}
       />
     </>
   )

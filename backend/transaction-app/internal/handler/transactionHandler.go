@@ -135,10 +135,15 @@ func writeTransactionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, txservice.ErrInvalidAmount),
 		errors.Is(err, txservice.ErrInvalidTransaction),
-		errors.Is(err, txservice.ErrInvalidTransactionType):
+		errors.Is(err, txservice.ErrInvalidTransactionType),
+		errors.Is(err, txservice.ErrInsufficientFunds),
+		errors.Is(err, txservice.ErrFundsReservedBySubAccounts):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	case errors.Is(err, txservice.ErrAccountNotFound),
+		errors.Is(err, txservice.ErrTransactionNotFound):
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
 	default:
 		slog.Error("transaction request failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal_server_error", "internal server error")
+		writeError(w, http.StatusInternalServerError, "internal_server_error", "внутренняя ошибка сервера")
 	}
 }
