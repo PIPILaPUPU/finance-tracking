@@ -73,6 +73,7 @@ func run() error {
 	r.Post("/accounts", accHandler.Create)
 	r.Get("/accounts", accHandler.GetAll)
 	r.Get("/accounts/{id}", accHandler.GetByID)
+	r.Patch("/accounts/{id}", accHandler.Update)
 	r.Get("/accounts/{id}/sub-accounts", accHandler.GetSubAccounts)
 	r.Delete("/accounts/{id}", accHandler.Delete)
 

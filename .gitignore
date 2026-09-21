@@ -44,3 +44,4 @@ tmp/
 
 # Database 
 connect-to-db.bash
+.gocache/

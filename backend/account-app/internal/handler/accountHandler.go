@@ -20,6 +20,7 @@ type accountService interface {
 	GetAll(context.Context, uuid.UUID) ([]model.Account, error)
 	GetByID(context.Context, uuid.UUID, uuid.UUID) (model.Account, error)
 	GetSubAccounts(context.Context, uuid.UUID, uuid.UUID) ([]model.Account, error)
+	Update(context.Context, uuid.UUID, uuid.UUID, model.UpdateAccountRequest) (model.Account, error)
 	Delete(context.Context, uuid.UUID, uuid.UUID) error
 }
 
@@ -116,6 +117,34 @@ func (h *AccountHandler) GetSubAccounts(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, subs)
+}
+
+func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
+	Claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid account id")
+		return
+	}
+
+	var request model.UpdateAccountRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	account, err := h.service.Update(r.Context(), Claims.UserID, id, request)
+	if err != nil {
+		writeHTTPError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, account)
 }
 
 func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
