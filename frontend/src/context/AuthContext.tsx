@@ -9,9 +9,9 @@ import {
 } from 'react'
 import {
   ApiError,
-  ensureAccessToken,
-  getAccessToken,
+  bootstrapSession,
   onSessionExpired,
+  refreshAccessToken,
   setAccessToken,
 } from '../api/client'
 import { fetchMe, loginRequest, logoutRequest, registerRequest } from '../api/auth'
@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function bootstrap() {
-      await ensureAccessToken()
-      if (!cancelled && !getAccessToken()) {
+      const sessionOk = await bootstrapSession()
+      if (!cancelled && !sessionOk) {
         setBootstrapping(false)
         return
       }
@@ -63,8 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await fetchMe()
         if (!cancelled) setUser(me)
       } catch {
-        setAccessToken(null)
-        if (!cancelled) setUser(null)
+        const restored = !cancelled && (await refreshAccessToken())
+        if (restored) {
+          try {
+            const me = await fetchMe()
+            if (!cancelled) setUser(me)
+            return
+          } catch {
+            // fall through to session reset
+          }
+        }
+        if (!cancelled) {
+          setAccessToken(null)
+          setUser(null)
+        }
       } finally {
         if (!cancelled) setBootstrapping(false)
       }

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { ApiError } from '../api/client'
+import { ApiError, bootstrapSession, refreshAccessToken } from '../api/client'
 import * as accountsApi from '../api/accounts'
 import * as categoriesApi from '../api/categories'
 import * as transactionsApi from '../api/transactions'
@@ -66,17 +66,18 @@ function mapError(err: unknown, fallback: string): string {
 }
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, bootstrapping } = useAuth()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (allowRetry = true) => {
     setLoading(true)
     setError(null)
     try {
+      await bootstrapSession()
       const [nextAccounts, nextCategories, nextTransactions] = await Promise.all([
         accountsApi.listAccounts(),
         categoriesApi.listCategories(),
@@ -86,7 +87,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setCategories(nextCategories.map((item) => decorateCategory(item)))
       setTransactions(nextTransactions ?? [])
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) return
+      if (err instanceof ApiError && err.status === 401 && allowRetry) {
+        const restored = await refreshAccessToken()
+        if (restored) {
+          return refresh(false)
+        }
+        return
+      }
       setError(mapError(err, 'Не удалось загрузить данные'))
     } finally {
       setLoading(false)
@@ -94,9 +101,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (bootstrapping || !isAuthenticated) {
+      if (!bootstrapping && !isAuthenticated) {
+        setLoading(false)
+      }
+      return
+    }
     void refresh()
-  }, [isAuthenticated, refresh])
+  }, [isAuthenticated, bootstrapping, refresh])
 
   const totalBalance = useMemo(
     () => getRootAccounts(accounts).reduce((sum, a) => sum + a.balance, 0),
