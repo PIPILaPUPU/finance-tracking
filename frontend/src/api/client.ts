@@ -10,6 +10,11 @@ export class ApiError extends Error {
 }
 
 const TOKEN_KEY = 'ft_access_token'
+const API_PREFIX = '/api'
+
+function apiPath(path: string): string {
+  return path.startsWith(API_PREFIX) ? path : `${API_PREFIX}${path}`
+}
 
 export function getAccessToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -18,6 +23,21 @@ export function getAccessToken(): string | null {
 export function setAccessToken(token: string | null) {
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else localStorage.removeItem(TOKEN_KEY)
+}
+
+function isAccessTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { exp?: number }
+    if (!payload.exp) return true
+    return payload.exp * 1000 <= Date.now() + 30_000
+  } catch {
+    return true
+  }
+}
+
+function hasValidAccessToken(): boolean {
+  const token = getAccessToken()
+  return Boolean(token && !isAccessTokenExpired(token))
 }
 
 type RequestOptions = {
@@ -50,7 +70,7 @@ export async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
-        const res = await fetch('/auth/refresh', {
+        const res = await fetch(apiPath('/auth/refresh'), {
           method: 'POST',
           credentials: 'include',
         })
@@ -73,37 +93,55 @@ export async function refreshAccessToken(): Promise<boolean> {
   return refreshPromise
 }
 
-let bootstrapSessionPromise: Promise<boolean> | null = null
+let refreshInFlight: Promise<boolean> | null = null
 
-/** Used on app load: refresh cookie may exist even when localStorage is empty. */
-export function ensureAccessToken(): Promise<boolean> {
-  if (getAccessToken()) {
+function refreshIfNeeded(): Promise<boolean> {
+  if (hasValidAccessToken()) {
     return Promise.resolve(true)
   }
-  if (!bootstrapSessionPromise) {
-    bootstrapSessionPromise = refreshAccessToken().finally(() => {
-      bootstrapSessionPromise = null
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null
     })
   }
-  return bootstrapSessionPromise
+  return refreshInFlight
+}
+
+/** Ensures a valid access token before authenticated API calls. */
+export function ensureAccessToken(): Promise<boolean> {
+  return refreshIfNeeded()
+}
+
+let sessionInitPromise: Promise<boolean> | null = null
+
+/** Called once on page load — restore session from httpOnly refresh cookie. */
+export function bootstrapSession(): Promise<boolean> {
+  if (!sessionInitPromise) {
+    sessionInitPromise = (async () => {
+      await refreshAccessToken()
+      return hasValidAccessToken()
+    })()
+  }
+  return sessionInitPromise
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (options.auth !== false && !getAccessToken()) {
-    await ensureAccessToken()
-  }
-
   const headers: Record<string, string> = {}
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
 
   if (options.auth !== false) {
+    await ensureAccessToken()
     const token = getAccessToken()
-    if (token) headers.Authorization = `Bearer ${token}`
+    if (!token) {
+      notifySessionExpired()
+      throw new ApiError(401, 'invalid_token', 'Bearer token is required')
+    }
+    headers.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(path, {
+  const res = await fetch(apiPath(path), {
     method: options.method ?? (options.body !== undefined ? 'POST' : 'GET'),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -133,10 +171,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!res.ok) {
-    const err = payload as { error?: string; message?: string } | null
+    const err = payload as { error?: string; code?: string; message?: string } | null
     throw new ApiError(
       res.status,
-      err?.error ?? 'request_failed',
+      err?.error ?? err?.code ?? 'request_failed',
       err?.message ?? `Request failed with status ${res.status}`,
     )
   }

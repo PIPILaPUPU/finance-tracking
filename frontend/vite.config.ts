@@ -5,12 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/auth': 'http://localhost:8080',
-      '/releases': 'http://localhost:8080',
-      '/accounts': 'http://localhost:8081',
-      '/category': 'http://localhost:8083',
-      '/categories': 'http://localhost:8083',
-      '/transactions': 'http://localhost:8082',
+      '/api': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
 })
