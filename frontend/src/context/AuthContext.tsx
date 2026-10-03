@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { ApiError, getAccessToken, setAccessToken } from '../api/client'
+import {
+  ApiError,
+  ensureAccessToken,
+  getAccessToken,
+  onSessionExpired,
+  setAccessToken,
+} from '../api/client'
 import { fetchMe, loginRequest, logoutRequest, registerRequest } from '../api/auth'
 import type { LoginRequest, RegisterRequest, User } from '../types'
 
@@ -38,12 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [bootstrapping, setBootstrapping] = useState(true)
 
   useEffect(() => {
+    return onSessionExpired(() => {
+      setUser(null)
+    })
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
 
     async function bootstrap() {
-      const token = getAccessToken()
-      if (!token) {
-        if (!cancelled) setBootstrapping(false)
+      await ensureAccessToken()
+      if (!cancelled && !getAccessToken()) {
+        setBootstrapping(false)
         return
       }
 

@@ -38,10 +38,14 @@ export function CategoriesPage() {
               <span className="category-badge" style={{ background: category.color }} aria-hidden>
                 <CategoryIcon name={category.icon} width={20} height={20} />
               </span>
-              <div className="category-meta">
+              <button
+                type="button"
+                className="category-meta"
+                onClick={() => setEditId(category.id)}
+              >
                 <span className="name">{category.name}</span>
                 <span className="kind">{categoryKindLabel(category)}</span>
-              </div>
+              </button>
               <div className="category-item-actions">
                 <button
                   type="button"
