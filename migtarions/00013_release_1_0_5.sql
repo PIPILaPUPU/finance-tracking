@@ -5,7 +5,7 @@
 WITH release AS (
     INSERT INTO releases (version, title, description)
     VALUES (
-        '1.0.3',
+        '1.0.5',
         'Что нового в Finance Tracker',
         'Исправлен баг загрузки страницы при перезагрузке страницы.'
     )
@@ -20,4 +20,4 @@ CROSS JOIN (
 ) AS item(text, sort_order);
 
 -- +goose Down
-DELETE FROM releases WHERE version = '1.0.3';
+DELETE FROM releases WHERE version = '1.0.5';
