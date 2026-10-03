@@ -23,7 +23,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("account service stoped", err)
+		slog.Error("category service stoped", err)
 		os.Exit(1)
 	}
 }

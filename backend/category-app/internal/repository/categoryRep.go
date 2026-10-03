@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrNotFound     = errors.New("category not found")
-	categoryColumns = `id, userid, categoryname, created_at, updated_at`
+	categoryColumns = `id, userid, categoryname, is_expense, is_income, color, icon, created_at, updated_at`
 )
 
 type CategoryRepository interface {
@@ -34,18 +34,24 @@ func NewPostgresCategoryRepository(pool *pgxpool.Pool, log *slog.Logger) *Postgr
 	return &PostgreCategoryRepository{pool: pool, logger: log}
 }
 
+func scanCategory(row pgx.Row) (model.Category, error) {
+	var c model.Category
+	err := row.Scan(&c.ID, &c.User, &c.Name, &c.IsExpense, &c.IsIncome,
+		&c.Color, &c.Icon, &c.Created_at, &c.Updated_at)
+	return c, err
+}
+
 // Create inserts new category
 func (r *PostgreCategoryRepository) Create(ctx context.Context, userID uuid.UUID, request model.Category) (model.Category, error) {
-	query := `
-        INSERT INTO Category (id, userid, categoryname)
-        VALUES ($1, $2, $3)
-        RETURNING id, userid, categoryname, created_at, updated_at
-    `
+	row := r.pool.QueryRow(ctx, `
+        INSERT INTO Category (id, userid, categoryname, is_expense, is_income, color, icon)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING `+categoryColumns,
+		request.ID, request.User, request.Name,
+		request.IsExpense, request.IsIncome, request.Color, request.Icon)
 
-	row := r.pool.QueryRow(ctx, query, request.ID, request.User, request.Name)
-
-	var c model.Category
-	if err := row.Scan(&c.ID, &c.User, &c.Name, &c.Created_at, &c.Updated_at); err != nil {
+	c, err := scanCategory(row)
+	if err != nil {
 		return model.Category{}, fmt.Errorf("create category: %w", err)
 	}
 
@@ -54,10 +60,10 @@ func (r *PostgreCategoryRepository) Create(ctx context.Context, userID uuid.UUID
 
 func (r *PostgreCategoryRepository) GetAll(ctx context.Context, userID uuid.UUID) ([]model.Category, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, userid, categoryname, created_at, updated_at
+        SELECT `+categoryColumns+`
         FROM Category
         WHERE userid = $1
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, LOWER(categoryname) ASC
     `, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get categories list: %w", err)
@@ -66,8 +72,8 @@ func (r *PostgreCategoryRepository) GetAll(ctx context.Context, userID uuid.UUID
 
 	categories := make([]model.Category, 0)
 	for rows.Next() {
-		var c model.Category
-		if err := rows.Scan(&c.ID, &c.User, &c.Name, &c.Created_at, &c.Updated_at); err != nil {
+		c, err := scanCategory(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
 		categories = append(categories, c)
@@ -81,8 +87,7 @@ func (r *PostgreCategoryRepository) GetAll(ctx context.Context, userID uuid.UUID
 
 func (r *PostgreCategoryRepository) GetById(ctx context.Context, userID uuid.UUID, categoryId uuid.UUID) (model.Category, error) {
 	row := r.pool.QueryRow(ctx, `SELECT `+categoryColumns+` FROM Category WHERE id = $1 and userid = $2`, categoryId, userID)
-	var c model.Category
-	err := row.Scan(&c.ID, &c.User, &c.Name, &c.Created_at, &c.Updated_at)
+	c, err := scanCategory(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Category{}, ErrNotFound
 	}
@@ -95,13 +100,13 @@ func (r *PostgreCategoryRepository) GetById(ctx context.Context, userID uuid.UUI
 func (r *PostgreCategoryRepository) Update(ctx context.Context, userID uuid.UUID, categoryId uuid.UUID, request model.Category) (model.Category, error) {
 	row := r.pool.QueryRow(ctx, `
         UPDATE Category
-        SET categoryname = $1, updated_at = NOW()
-        WHERE id = $2 AND userid = $3
+        SET categoryname = $1, is_expense = $2, is_income = $3, color = $4, icon = $5, updated_at = NOW()
+        WHERE id = $6 AND userid = $7
         RETURNING `+categoryColumns+`
-    `, request.Name, categoryId, userID)
+    `, request.Name, request.IsExpense, request.IsIncome, request.Color, request.Icon, categoryId, userID)
 
-	var c model.Category
-	if err := row.Scan(&c.ID, &c.User, &c.Name, &c.Created_at, &c.Updated_at); err != nil {
+	c, err := scanCategory(row)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Category{}, ErrNotFound
 		}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PIPILaPUPU/finance-tracking/auth-app/internal/model"
+	"github.com/PIPILaPUPU/finance-tracking/basecategories"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,13 +40,13 @@ func NewPostgresUserRepository(pool *pgxpool.Pool, log *slog.Logger) *PostgresUs
 	return &PostgresUserRepository{pool: pool, logger: log}
 }
 
-var userColumns = `id, username, email, password_hash, created_at, updated_at`
+var userColumns = `id, username, email, password_hash, last_seen_release, created_at, updated_at`
 
 func scanUser(row pgx.Row) (model.User, error) {
 	var user model.User
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email,
-		&user.Password_hash, &user.Created_at, &user.Updated_at)
+		&user.Password_hash, &user.LastSeenRelease, &user.Created_at, &user.Updated_at)
 	return user, err
 }
 
@@ -74,6 +75,15 @@ func (r *PostgresUserRepository) CreateUserWithSession(ctx context.Context,
 		INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)`, refresh.ID, user.ID, refresh.TokenHash, refresh.ExpiresAt); err != nil {
 		return model.User{}, fmt.Errorf("create registration session: %w", err)
+	}
+
+	names, colors, icons := basecategories.Columns()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO Category (id, userid, categoryname, is_expense, is_income, color, icon)
+		SELECT gen_random_uuid(), $1, base.name, TRUE, TRUE, base.color, base.icon
+		FROM UNNEST($2::text[], $3::text[], $4::text[]) AS base(name, color, icon)`,
+		user.ID, names, colors, icons); err != nil {
+		return model.User{}, fmt.Errorf("create base categories: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

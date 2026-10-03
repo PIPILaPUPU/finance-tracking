@@ -14,8 +14,8 @@ import * as transactionsApi from '../api/transactions'
 import type {
   Account,
   Category,
+  CategoryRequest,
   CreateAccountRequest,
-  CreateCategoryRequest,
   CreateTransactionRequest,
   Transaction,
   UpdateAccountRequest,
@@ -47,12 +47,10 @@ interface FinanceContextValue {
     data: UpdateAccountRequest,
   ) => Promise<{ ok: true } | { ok: false; message: string }>
   removeAccount: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
-  addCategory: (
-    data: CreateCategoryRequest,
-  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  addCategory: (data: CategoryRequest) => Promise<{ ok: true } | { ok: false; message: string }>
   updateCategory: (
     id: string,
-    name: string,
+    data: CategoryRequest,
   ) => Promise<{ ok: true } | { ok: false; message: string }>
   removeCategory: (id: string) => Promise<{ ok: true } | { ok: false; message: string }>
   addTransaction: (
@@ -85,7 +83,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         transactionsApi.listTransactions(),
       ])
       setAccounts(nextAccounts.map((item, index) => decorateAccount(item, index)))
-      setCategories(nextCategories.map((item, index) => decorateCategory(item, index)))
+      setCategories(nextCategories.map((item) => decorateCategory(item)))
       setTransactions(nextTransactions ?? [])
     } catch (err) {
       setError(mapError(err, 'Не удалось загрузить данные'))
@@ -156,19 +154,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const addCategory = useCallback(async (data: CreateCategoryRequest) => {
+  const addCategory = useCallback(async (data: CategoryRequest) => {
     try {
       const created = await categoriesApi.createCategory(data)
-      setCategories((prev) => [...prev, decorateCategory(created, prev.length)])
+      setCategories((prev) => [...prev, decorateCategory(created)])
       return { ok: true as const }
     } catch (err) {
       return { ok: false as const, message: mapError(err, 'Не удалось создать категорию') }
     }
   }, [])
 
-  const updateCategory = useCallback(async (id: string, name: string) => {
+  const updateCategory = useCallback(async (id: string, data: CategoryRequest) => {
     try {
-      const updated = await categoriesApi.updateCategoryRequest(id, { name })
+      const updated = await categoriesApi.updateCategoryRequest(id, data)
       setCategories((prev) =>
         prev.map((c) => (c.id === id ? decorateCategory({ ...c, ...updated }) : c)),
       )

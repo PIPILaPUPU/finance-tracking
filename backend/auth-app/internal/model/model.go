@@ -7,12 +7,13 @@ import (
 )
 
 type User struct {
-	ID            uuid.UUID `json:"id"`
-	Username      string    `json:"username"`
-	Email         string    `json:"email"`
-	Password_hash string    `json:"-"`
-	Created_at    time.Time `json:"created_at"`
-	Updated_at    time.Time `json:"updated_at"`
+	ID              uuid.UUID `json:"id"`
+	Username        string    `json:"username"`
+	Email           string    `json:"email"`
+	Password_hash   string    `json:"-"`
+	LastSeenRelease *string   `json:"last_seen_release"`
+	Created_at      time.Time `json:"created_at"`
+	Updated_at      time.Time `json:"updated_at"`
 }
 
 type RegisterRequest struct {
@@ -55,4 +56,19 @@ type RefreshSession struct {
 type Claims struct {
 	UserID   uuid.UUID
 	Username string
+}
+
+type ReleaseItem struct {
+	ID        uuid.UUID `json:"id"`
+	Text      string    `json:"text"`
+	SortOrder int       `json:"sort_order"`
+}
+
+type Release struct {
+	ID          uuid.UUID     `json:"id"`
+	Version     string        `json:"version"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	CreatedAt   time.Time     `json:"created_at"`
+	Items       []ReleaseItem `json:"items"`
 }

@@ -30,8 +30,24 @@ export interface User {
   id: string
   username: string
   email: string
+  last_seen_release: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ReleaseItem {
+  id: string
+  text: string
+  sort_order: number
+}
+
+export interface Release {
+  id: string
+  version: string
+  title: string
+  description: string
+  created_at: string
+  items: ReleaseItem[]
 }
 
 export interface Account {
@@ -58,11 +74,15 @@ export interface Category {
   id: string
   userid: string
   name: string
+  /** A category may be used for expenses, income or both. */
+  is_expense: boolean
+  is_income: boolean
+  /** Hex value, e.g. `#5B4BFF`. */
+  color: string
+  /** Key from CATEGORY_ICONS. */
+  icon: string
   created_at: string
   updated_at: string
-  /** UI-only */
-  color?: string
-  icon?: string
 }
 
 export interface Transaction {
@@ -108,8 +128,13 @@ export interface UpdateAccountRequest {
   percent?: number | null
 }
 
-export interface CreateCategoryRequest {
+/** Same shape is used for create and update. */
+export interface CategoryRequest {
   name: string
+  is_expense: boolean
+  is_income: boolean
+  color: string
+  icon: string
 }
 
 export interface CreateTransactionRequest {

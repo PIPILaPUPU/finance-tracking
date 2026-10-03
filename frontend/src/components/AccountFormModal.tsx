@@ -236,9 +236,9 @@ export function AccountFormModal({
             <label htmlFor="acc-percent">Процент</label>
             <input
               id="acc-percent"
-              type="number"
-              min={1}
-              max={100}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
               value={percent}
               onChange={(e) => setPercent(e.target.value)}
             />
@@ -253,9 +253,9 @@ export function AccountFormModal({
             <label htmlFor="acc-balance">{isSub ? 'Сумма субсчёта' : 'Баланс'}</label>
             <input
               id="acc-balance"
-              type="number"
-              min={0.01}
-              step={0.01}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
               placeholder="1000.50"

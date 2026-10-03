@@ -54,6 +54,8 @@ ENTRYPOINT ["/migrate.sh"]
 # ---------- Frontend + nginx gateway ----------
 FROM node:22-alpine AS frontend-builder
 WORKDIR /src
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=${VITE_APP_VERSION}
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./

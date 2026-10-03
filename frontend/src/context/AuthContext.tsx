@@ -18,6 +18,7 @@ interface AuthContextValue {
   login: (data: LoginRequest) => Promise<{ ok: true } | { ok: false; message: string }>
   register: (data: RegisterRequest) => Promise<{ ok: true } | { ok: false; message: string }>
   logout: () => Promise<void>
+  setLastSeenRelease: (version: string) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -94,6 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const setLastSeenRelease = useCallback((version: string) => {
+    setUser((current) =>
+      current
+        ? {
+            ...current,
+            last_seen_release: version,
+          }
+        : current,
+    )
+  }, [])
+
   const value = useMemo(
     () => ({
       user,
@@ -102,8 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      setLastSeenRelease,
     }),
-    [user, bootstrapping, login, register, logout],
+    [user, bootstrapping, login, register, logout, setLastSeenRelease],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
