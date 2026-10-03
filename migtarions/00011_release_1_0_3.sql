@@ -22,7 +22,7 @@ SELECT release.id, item.text, item.sort_order
 FROM release
 CROSS JOIN (
     VALUES
-        ('Исправлен баг обновления вкладки счетов и категорий при перезагрузке страницы.', 1),
+        ('Исправлен баг обновления вкладки счетов и категорий при перезагрузке страницы.', 1)
 ) AS item(text, sort_order);
 
 -- +goose Down
