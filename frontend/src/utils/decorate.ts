@@ -1,7 +1,7 @@
 import type { Account, Category, Transaction } from '../types'
+import { DEFAULT_CATEGORY_COLOR, DEFAULT_CATEGORY_ICON } from './categoryStyle'
 
 const ACCOUNT_COLORS = ['#FF8A3D', '#22C55E', '#3B5BDB', '#EC4899', '#8B5CF6', '#14B8A6']
-const CATEGORY_COLORS = ['#FF8A3D', '#5B4BFF', '#EC4899', '#22C55E', '#8B5CF6', '#F59E0B']
 
 export function decorateAccount(account: Account, index = 0): Account {
   const isSub = Boolean(account.parent_id)
@@ -21,11 +21,12 @@ export function decorateAccount(account: Account, index = 0): Account {
   }
 }
 
-export function decorateCategory(category: Category, index = 0): Category {
+/** Guards against rows created before colour/icon became part of the API. */
+export function decorateCategory(category: Category): Category {
   return {
     ...category,
-    color: category.color ?? CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-    icon: category.icon ?? 'cart',
+    color: category.color || DEFAULT_CATEGORY_COLOR,
+    icon: category.icon || DEFAULT_CATEGORY_ICON,
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Category, Transaction } from '../types'
 import { formatDate, formatSignedMoney } from '../utils/format'
-import { IconCart } from './Icons'
+import { CategoryIcon } from './CategoryIcons'
 
 interface TransactionRowProps {
   transaction: Transaction
@@ -12,7 +12,7 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
   return (
     <article className="tx-row">
       <div className="tx-icon" style={{ background: color }}>
-        <IconCart width={18} height={18} />
+        <CategoryIcon name={category?.icon} width={18} height={18} />
       </div>
       <div className="tx-body">
         <h4>{transaction.description || category?.name || 'Операция'}</h4>

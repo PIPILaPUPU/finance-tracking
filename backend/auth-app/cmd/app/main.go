@@ -74,6 +74,9 @@ func run() error {
 		SameSite: parseSameSite(cfg.Cookie.SameSite),
 		TTL:      cfg.JWT.RefreshTTL,
 	}, *logger)
+	releaseRepo := repository.NewPostgresReleaseRepository(db)
+	releaseService := service.NewReleaseService(releaseRepo, os.Getenv("APP_VERSION"))
+	releaseHandler := handler.NewReleaseHandler(releaseService, *logger)
 
 	//==============================SERVER==================================
 	r := chi.NewRouter()
@@ -88,6 +91,8 @@ func run() error {
 		r.Post("/logout", authHandler.Logout)
 		r.With(authHandler.Authenticate).Get("/me", authHandler.Me)
 	})
+	r.With(authHandler.Authenticate).Get("/releases/latest", releaseHandler.Latest)
+	r.With(authHandler.Authenticate).Post("/releases/seen", releaseHandler.MarkSeen)
 
 	r.Get("/health_status", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

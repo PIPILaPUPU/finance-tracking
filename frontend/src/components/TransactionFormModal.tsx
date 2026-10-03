@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import type { Account, Category, CreateTransactionRequest, TransactionType } from '../types'
 import { accountLabel } from '../utils/accounts'
 import { parseMoneyInput } from '../utils/format'
@@ -29,6 +29,11 @@ export function TransactionFormModal({
   const [categoryId, setCategoryId] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const availableCategories = useMemo(
+    () => categories.filter((c) => (type === 'income' ? c.is_income : c.is_expense)),
+    [categories, type],
+  )
 
   const reset = () => {
     setType('expanse')
@@ -95,7 +100,10 @@ export function TransactionFormModal({
               key={value}
               type="button"
               className={`type-tab${type === value ? ' active' : ''}`}
-              onClick={() => setType(value)}
+              onClick={() => {
+                setType(value)
+                setCategoryId('')
+              }}
             >
               {label}
             </button>
@@ -106,9 +114,9 @@ export function TransactionFormModal({
           <label htmlFor="tx-amount">Сумма</label>
           <input
             id="tx-amount"
-            type="number"
-            min={0.01}
-            step={0.01}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="199.99"
@@ -166,7 +174,7 @@ export function TransactionFormModal({
               onChange={(e) => setCategoryId(e.target.value)}
             >
               <option value="">Без категории</option>
-              {categories.map((c) => (
+              {availableCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>

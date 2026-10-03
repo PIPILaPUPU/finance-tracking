@@ -6,13 +6,14 @@ interface ModalProps {
   open: boolean
   onClose: () => void
   children: ReactNode
+  dismissible?: boolean
 }
 
-export function Modal({ title, open, onClose, children }: ModalProps) {
+export function Modal({ title, open, onClose, children, dismissible = true }: ModalProps) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (dismissible && e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
@@ -20,7 +21,7 @@ export function Modal({ title, open, onClose, children }: ModalProps) {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [dismissible, open, onClose])
 
   if (!open) return null
 
@@ -29,7 +30,7 @@ export function Modal({ title, open, onClose, children }: ModalProps) {
       className="modal-backdrop"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (dismissible && e.target === e.currentTarget) onClose()
       }}
     >
       <div className="modal-sheet" role="dialog" aria-modal="true" aria-label={title}>

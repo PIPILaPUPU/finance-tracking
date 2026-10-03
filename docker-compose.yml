@@ -37,6 +37,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-auth-app}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      APP_VERSION: ${APP_VERSION:-dev}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -87,6 +88,8 @@ services:
     build:
       context: .
       target: web
+      args:
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     restart: unless-stopped
     ports:
       - "${WEB_HOST_PORT:-8080}:80"

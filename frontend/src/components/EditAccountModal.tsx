@@ -123,9 +123,9 @@ export function EditAccountModal({
                 <label htmlFor="edit-acc-percent">Процент</label>
                 <input
                   id="edit-acc-percent"
-                  type="number"
-                  min={1}
-                  max={100}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
                   value={percent}
                   onChange={(e) => setPercent(e.target.value)}
                 />
@@ -140,9 +140,9 @@ export function EditAccountModal({
                 <label htmlFor="edit-acc-balance">Сумма субсчёта</label>
                 <input
                   id="edit-acc-balance"
-                  type="number"
-                  min={0.01}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                   value={balance}
                   onChange={(e) => setBalance(e.target.value)}
                 />
