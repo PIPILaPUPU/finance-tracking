@@ -25,6 +25,8 @@ export function decorateAccount(account: Account, index = 0): Account {
 export function decorateCategory(category: Category): Category {
   return {
     ...category,
+    is_expense: category.is_expense ?? true,
+    is_income: category.is_income ?? true,
     color: category.color || DEFAULT_CATEGORY_COLOR,
     icon: category.icon || DEFAULT_CATEGORY_ICON,
   }

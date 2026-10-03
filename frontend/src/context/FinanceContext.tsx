@@ -86,6 +86,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setCategories(nextCategories.map((item) => decorateCategory(item)))
       setTransactions(nextTransactions ?? [])
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return
       setError(mapError(err, 'Не удалось загрузить данные'))
     } finally {
       setLoading(false)

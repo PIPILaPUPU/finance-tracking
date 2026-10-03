@@ -191,7 +191,7 @@ func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,
-		Path:     "/auth",
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.Cookie.Secure,
 		SameSite: h.Cookie.SameSite,
@@ -202,7 +202,7 @@ func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string) {
 func (h *AuthHandler) clearRefreshCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
-		Path:     "/auth",
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.Cookie.Secure,
 		SameSite: h.Cookie.SameSite,

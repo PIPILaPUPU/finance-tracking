@@ -27,9 +27,26 @@ type RequestOptions = {
   retry?: boolean
 }
 
+type SessionExpiredListener = () => void
+
+const sessionExpiredListeners = new Set<SessionExpiredListener>()
+
+export function onSessionExpired(listener: SessionExpiredListener): () => void {
+  sessionExpiredListeners.add(listener)
+  return () => sessionExpiredListeners.delete(listener)
+}
+
+function notifySessionExpired() {
+  setAccessToken(null)
+  for (const listener of sessionExpiredListeners) {
+    listener()
+  }
+}
+
 let refreshPromise: Promise<boolean> | null = null
 
-async function refreshAccessToken(): Promise<boolean> {
+/** Restore access token from the httpOnly refresh cookie. */
+export async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
@@ -38,18 +55,15 @@ async function refreshAccessToken(): Promise<boolean> {
           credentials: 'include',
         })
         if (!res.ok) {
-          setAccessToken(null)
           return false
         }
         const data = (await res.json()) as { access_token?: string }
         if (!data.access_token) {
-          setAccessToken(null)
           return false
         }
         setAccessToken(data.access_token)
         return true
       } catch {
-        setAccessToken(null)
         return false
       } finally {
         refreshPromise = null
@@ -59,7 +73,26 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshPromise
 }
 
+let bootstrapSessionPromise: Promise<boolean> | null = null
+
+/** Used on app load: refresh cookie may exist even when localStorage is empty. */
+export function ensureAccessToken(): Promise<boolean> {
+  if (getAccessToken()) {
+    return Promise.resolve(true)
+  }
+  if (!bootstrapSessionPromise) {
+    bootstrapSessionPromise = refreshAccessToken().finally(() => {
+      bootstrapSessionPromise = null
+    })
+  }
+  return bootstrapSessionPromise
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (options.auth !== false && !getAccessToken()) {
+    await ensureAccessToken()
+  }
+
   const headers: Record<string, string> = {}
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -82,6 +115,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (refreshed) {
       return apiRequest<T>(path, { ...options, retry: false })
     }
+    notifySessionExpired()
   }
 
   if (res.status === 204) {
