@@ -29,6 +29,10 @@ export function ProfilePage() {
           Счета
           <IconChevron width={18} height={18} />
         </Link>
+        <Link className="menu-item" to="/refunds">
+          Отмена операций
+          <IconChevron width={18} height={18} />
+        </Link>
         <button
           type="button"
           className="menu-item"

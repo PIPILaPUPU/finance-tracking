@@ -74,6 +74,7 @@ func run() error {
 	r.Use(authMiddleware.Authenticate)
 
 	r.Post("/transactions", handler.CreateTransaction)
+	r.Post("/transactions/cancel", handler.CancelExpenses)
 	r.Get("/transactions", handler.GetTransactions)
 	r.Get("/transactions/{id}", handler.GetTransaction)
 

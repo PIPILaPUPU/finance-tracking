@@ -56,6 +56,9 @@ interface FinanceContextValue {
   addTransaction: (
     data: CreateTransactionRequest,
   ) => Promise<{ ok: true } | { ok: false; message: string }>
+  cancelExpenses: (
+    transactionIds: string[],
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
@@ -229,6 +232,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const cancelExpenses = useCallback(async (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return { ok: false as const, message: 'Выберите хотя бы одну операцию' }
+    }
+
+    try {
+      await transactionsApi.cancelExpenses(transactionIds)
+      const cancelled = new Set(transactionIds)
+      setTransactions((prev) => prev.filter((transaction) => !cancelled.has(transaction.id)))
+      const nextAccounts = await accountsApi.listAccounts()
+      setAccounts(nextAccounts.map((item, index) => decorateAccount(item, index)))
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, message: mapError(err, 'Не удалось отменить операции') }
+    }
+  }, [])
+
   const value = useMemo(
     () => ({
       accounts,
@@ -248,6 +268,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       updateCategory,
       removeCategory,
       addTransaction,
+      cancelExpenses,
     }),
     [
       accounts,
@@ -267,6 +288,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       updateCategory,
       removeCategory,
       addTransaction,
+      cancelExpenses,
     ],
   )
 

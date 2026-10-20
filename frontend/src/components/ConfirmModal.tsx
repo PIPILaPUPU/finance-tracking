@@ -56,7 +56,7 @@ export function ConfirmModal({
           Отмена
         </button>
         <button type="button" className="btn btn-danger" onClick={() => void handleConfirm()} disabled={submitting}>
-          {submitting ? 'Удаляем…' : confirmLabel}
+          {submitting ? `${confirmLabel}…` : confirmLabel}
         </button>
       </div>
     </Modal>

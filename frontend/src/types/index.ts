@@ -96,6 +96,7 @@ export interface Transaction {
   amount: number
   description: string
   created_at: string
+  cancelled_at?: string
 }
 
 export interface LoginRequest {

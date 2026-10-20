@@ -731,6 +731,40 @@ img {
   box-shadow: var(--shadow-soft);
 }
 
+.tx-row.selectable {
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition:
+    opacity 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.tx-row.selectable:hover,
+.tx-row.selectable:focus-visible {
+  border-color: rgba(91, 75, 255, 0.32);
+  outline: none;
+}
+
+.tx-row.selectable.selected {
+  border-color: var(--primary);
+  box-shadow: 0 10px 26px rgba(91, 75, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.tx-row.selectable.dimmed {
+  opacity: 0.45;
+}
+
+.tx-select-checkbox {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 .tx-icon {
   width: 44px;
   height: 44px;
@@ -777,6 +811,62 @@ img {
 
 .tx-amount.transfer {
   color: var(--primary);
+}
+
+.refund-page {
+  min-height: 100%;
+}
+
+.refund-list {
+  padding-bottom: 12px;
+}
+
+.refund-action-bar {
+  position: sticky;
+  bottom: calc(var(--nav-h) + 12px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 40px rgba(25, 27, 44, 0.2);
+  backdrop-filter: blur(14px);
+}
+
+.refund-action-bar > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.refund-action-bar strong {
+  font-size: 0.92rem;
+}
+
+.refund-action-bar span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.refund-action-bar .btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .refund-action-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .refund-action-bar .btn {
+    width: 100%;
+  }
 }
 
 /* —— Categories —— */
@@ -1338,6 +1428,10 @@ img {
   .fab {
     right: 40px;
     bottom: 40px;
+  }
+
+  .refund-action-bar {
+    bottom: 16px;
   }
 
   .modal-backdrop {

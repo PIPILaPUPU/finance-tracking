@@ -10,19 +10,23 @@ import (
 )
 
 var (
-	ErrInvalidTransactionType = errors.New("некорректный тип операции")
-	ErrInvalidAmount          = errors.New("сумма должна быть больше 0")
-	ErrInvalidTransaction     = errors.New("некорректные данные операции")
-	ErrTransactionNotFound    = errors.New("операция не найдена")
-	ErrAccountNotFound        = errors.New("счёт не найден")
-	ErrInsufficientFunds           = errors.New("недостаточно средств на счёте")
-	ErrFundsReservedBySubAccounts  = errors.New("недостаточно свободных средств: часть зарезервирована на субсчетах")
+	ErrInvalidTransactionType     = errors.New("некорректный тип операции")
+	ErrInvalidAmount              = errors.New("сумма должна быть больше 0")
+	ErrInvalidTransaction         = errors.New("некорректные данные операции")
+	ErrTransactionNotFound        = errors.New("операция не найдена")
+	ErrTransactionNotCancelable   = errors.New("можно отменить только активные расходы")
+	ErrEmptyTransactionSelection  = errors.New("выберите хотя бы одну операцию")
+	ErrDuplicateTransaction       = errors.New("операции не должны повторяться")
+	ErrAccountNotFound            = errors.New("счёт не найден")
+	ErrInsufficientFunds          = errors.New("недостаточно средств на счёте")
+	ErrFundsReservedBySubAccounts = errors.New("недостаточно свободных средств: часть зарезервирована на субсчетах")
 )
 
 type TransactionRepository interface {
 	Create(context.Context, model.Transaction) (model.Transaction, error)
 	GetAll(context.Context, uuid.UUID) ([]model.Transaction, error)
 	GetById(context.Context, uuid.UUID, uuid.UUID) (model.Transaction, error)
+	CancelExpenses(context.Context, uuid.UUID, []uuid.UUID) error
 }
 
 type TransactionService struct {
@@ -93,6 +97,38 @@ func (s *TransactionService) GetAll(ctx context.Context, userID uuid.UUID) ([]mo
 
 func (s *TransactionService) GetById(ctx context.Context, userID uuid.UUID, transactionID uuid.UUID) (model.Transaction, error) {
 	return s.repository.GetById(ctx, userID, transactionID)
+}
+
+func (s *TransactionService) CancelExpenses(ctx context.Context, userID uuid.UUID, transactionIDs []uuid.UUID) error {
+	if len(transactionIDs) == 0 {
+		return ErrEmptyTransactionSelection
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(transactionIDs))
+	for _, id := range transactionIDs {
+		if id == uuid.Nil {
+			return ErrTransactionNotFound
+		}
+		if _, exists := seen[id]; exists {
+			return ErrDuplicateTransaction
+		}
+		seen[id] = struct{}{}
+	}
+
+	if err := s.repository.CancelExpenses(ctx, userID, transactionIDs); err != nil {
+		switch {
+		case errors.Is(err, repository.ErrTransactionNotFound):
+			return ErrTransactionNotFound
+		case errors.Is(err, repository.ErrTransactionNotCancelable):
+			return ErrTransactionNotCancelable
+		case errors.Is(err, repository.ErrAccountNotFound):
+			return ErrAccountNotFound
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func derefUUID(id *uuid.UUID) uuid.UUID {

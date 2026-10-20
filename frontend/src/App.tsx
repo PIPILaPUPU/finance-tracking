@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RegisterPage } from './pages/RegisterPage'
+import { RefundsPage } from './pages/RefundsPage'
 import { TransactionsPage } from './pages/TransactionsPage'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="accounts" element={<AccountsPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="categories" element={<CategoriesPage />} />
+              <Route path="refunds" element={<RefundsPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>
           </Route>
