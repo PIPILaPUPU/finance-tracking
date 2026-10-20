@@ -7,15 +7,16 @@ import (
 )
 
 type Transaction struct {
-	Id              uuid.UUID `json:"id"`
-	User_id         uuid.UUID `json:"user_id"`
-	Type            string    `json:"type"`
-	From_account_id uuid.UUID `json:"from_account_id"`
-	To_account_id   uuid.UUID `json:"to_account_id"`
-	Category_id     uuid.UUID `json:"category_id"`
-	Amount          int64     `json:"amount"`
-	Description     string    `json:"description"`
-	Created_at      time.Time `json:"created_at"`
+	Id              uuid.UUID  `json:"id"`
+	User_id         uuid.UUID  `json:"user_id"`
+	Type            string     `json:"type"`
+	From_account_id uuid.UUID  `json:"from_account_id"`
+	To_account_id   uuid.UUID  `json:"to_account_id"`
+	Category_id     uuid.UUID  `json:"category_id"`
+	Amount          int64      `json:"amount"`
+	Description     string     `json:"description"`
+	Created_at      time.Time  `json:"created_at"`
+	Cancelled_at    *time.Time `json:"cancelled_at,omitempty"`
 }
 
 type CreateTransactionRequest struct {
@@ -25,4 +26,8 @@ type CreateTransactionRequest struct {
 	CategoryID    *uuid.UUID `json:"category_id"`
 	Amount        int64      `json:"amount"`
 	Description   string     `json:"description"`
+}
+
+type CancelTransactionsRequest struct {
+	TransactionIDs []uuid.UUID `json:"transaction_ids"`
 }

@@ -19,6 +19,7 @@ type TransactionService interface {
 	Create(context.Context, uuid.UUID, model.CreateTransactionRequest) (model.Transaction, error)
 	GetAll(context.Context, uuid.UUID) ([]model.Transaction, error)
 	GetById(context.Context, uuid.UUID, uuid.UUID) (model.Transaction, error)
+	CancelExpenses(context.Context, uuid.UUID, []uuid.UUID) error
 }
 
 type TransactionHandler struct {
@@ -91,6 +92,27 @@ func (h *TransactionHandler) GetTransaction(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, transaction)
 }
 
+func (h *TransactionHandler) CancelExpenses(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication is required")
+		return
+	}
+
+	var req model.CancelTransactionsRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	if err := h.service.CancelExpenses(r.Context(), claims.UserID, req.TransactionIDs); err != nil {
+		writeTransactionError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // =======================================JSON=============================================
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -136,6 +158,9 @@ func writeTransactionError(w http.ResponseWriter, err error) {
 	case errors.Is(err, txservice.ErrInvalidAmount),
 		errors.Is(err, txservice.ErrInvalidTransaction),
 		errors.Is(err, txservice.ErrInvalidTransactionType),
+		errors.Is(err, txservice.ErrEmptyTransactionSelection),
+		errors.Is(err, txservice.ErrDuplicateTransaction),
+		errors.Is(err, txservice.ErrTransactionNotCancelable),
 		errors.Is(err, txservice.ErrInsufficientFunds),
 		errors.Is(err, txservice.ErrFundsReservedBySubAccounts):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

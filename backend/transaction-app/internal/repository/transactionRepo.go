@@ -21,7 +21,9 @@ var (
 	ErrAccountNotFound            = errors.New("account not found")
 	ErrInsufficientFunds          = errors.New("insufficient funds")
 	ErrFundsReservedBySubAccounts = errors.New("funds reserved by manual sub-accounts")
-	transactionColumns            = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description, created_at`
+	ErrTransactionNotFound        = errors.New("transaction not found")
+	ErrTransactionNotCancelable   = errors.New("transaction cannot be cancelled")
+	transactionColumns            = `id, user_id, type, from_account_id, to_account_id, category_id, amount, description, created_at, cancelled_at`
 )
 
 type PostgreTransactionRepository struct {
@@ -77,7 +79,7 @@ func (r *PostgreTransactionRepository) GetAll(ctx context.Context, userID uuid.U
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+transactionColumns+`
 		FROM transactions
-		WHERE user_id = $1
+		WHERE user_id = $1 AND cancelled_at IS NULL
 		ORDER BY created_at DESC
 	`, userID)
 	if err != nil {
@@ -112,6 +114,77 @@ func (r *PostgreTransactionRepository) GetById(ctx context.Context, userID uuid.
 		return model.Transaction{}, err
 	}
 	return t, nil
+}
+
+func (r *PostgreTransactionRepository) CancelExpenses(ctx context.Context, userID uuid.UUID, transactionIDs []uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin cancellation tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
+		SELECT `+transactionColumns+`
+		FROM transactions
+		WHERE user_id = $1 AND id = ANY($2)
+		ORDER BY id
+		FOR UPDATE
+	`, userID, transactionIDs)
+	if err != nil {
+		return fmt.Errorf("load transactions for cancellation: %w", err)
+	}
+
+	transactions := make([]model.Transaction, 0, len(transactionIDs))
+	for rows.Next() {
+		transaction, scanErr := scanTransaction(rows)
+		if scanErr != nil {
+			rows.Close()
+			return scanErr
+		}
+		transactions = append(transactions, transaction)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("read transactions for cancellation: %w", err)
+	}
+	rows.Close()
+
+	if len(transactions) != len(transactionIDs) {
+		return ErrTransactionNotFound
+	}
+
+	for _, transaction := range transactions {
+		if transaction.Type != "expanse" || transaction.Cancelled_at != nil {
+			return ErrTransactionNotCancelable
+		}
+		if err := creditToAccount(
+			ctx,
+			tx,
+			userID,
+			transaction.From_account_id,
+			transaction.Amount,
+			uuid.Nil,
+		); err != nil {
+			return err
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE transactions
+		SET cancelled_at = NOW()
+		WHERE user_id = $1 AND id = ANY($2) AND cancelled_at IS NULL
+	`, userID, transactionIDs)
+	if err != nil {
+		return fmt.Errorf("mark transactions cancelled: %w", err)
+	}
+	if tag.RowsAffected() != int64(len(transactionIDs)) {
+		return ErrTransactionNotCancelable
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit cancellation tx: %w", err)
+	}
+	return nil
 }
 
 func applyBalanceChanges(ctx context.Context, tx pgx.Tx, req model.Transaction) error {
@@ -430,6 +503,7 @@ func scanTransaction(row scannable) (model.Transaction, error) {
 		&t.Amount,
 		&t.Description,
 		&t.Created_at,
+		&t.Cancelled_at,
 	)
 	if err != nil {
 		return model.Transaction{}, err

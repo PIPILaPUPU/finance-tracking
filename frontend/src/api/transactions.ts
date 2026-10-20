@@ -11,3 +11,10 @@ export function createTransaction(data: CreateTransactionRequest) {
     body: data,
   })
 }
+
+export function cancelExpenses(transactionIds: string[]) {
+  return apiRequest<void>('/transactions/cancel', {
+    method: 'POST',
+    body: { transaction_ids: transactionIds },
+  })
+}
