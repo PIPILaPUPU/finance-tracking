@@ -10,6 +10,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check release notes in tagged commit
+        uses: actions/checkout@v4
+
+      - name: Verify release migration
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          suffix="${version//./_}"
+          if [[ "$version" == "1.0.1" ]]; then
+            migration="migtarions/00009_releases.sql"
+          else
+            shopt -s nullglob
+            matches=(migtarions/*_release_"$suffix".sql)
+            if (( ${#matches[@]} != 1 )); then
+              echo "Expected one release migration for $version in the tagged commit; found ${#matches[@]}." >&2
+              exit 1
+            fi
+            migration="${matches[0]}"
+          fi
+          if ! grep -Fq "'$version'" "$migration"; then
+            echo "Release migration $migration does not contain version $version." >&2
+            exit 1
+          fi
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.2
         with:
